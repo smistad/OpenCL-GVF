@@ -11,6 +11,9 @@
 #define MU = 0.05
 #define ITERATIONS 500
 #define FILENAME test.raw
+#define SIZE_X 256
+#define SIZE_Y 256
+#define SIZE_Z 256
 
 using namespace cl;
 
@@ -59,15 +62,49 @@ int main(void) {
         } 
 
         // Create Kernels
-        Kernel InitKernel = Kernel(program, "GVFInit");
-        Kernel IterationKernel = Kernel(program, "GVFIteration");
+        Kernel initKernel = Kernel(program, "GVFInit");
+        Kernel iterationKernel = Kernel(program, "GVFIteration");
 
         // Load volume to GPU
+        Image3D volume = Image3D(context, CL_MEM_READ, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
 
         // Run initialization kernel
+        Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CLFLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        initKernel.setArg(0, volume);
+        initKernel.setArg(1, initVectorField);
+
+        queue.enqueueNDRangeKernel(
+                initKernel,
+                NullRange,
+                NDRange(SIZE_X,SIZE_Y,SIZE_Z),
+                Nullrange
+        );
+
+        // Delete volume from device
+        volume.release();
+
+        // copy vector field and create double buffer
+        Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CLFLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CLFLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        queue.enqueueCopyImage(initVectorField, vectorField);
 
         // Run iterations
+        iterationKernel.setArg(0, initVectorField);
+        iterationKernel.setArg(3, MU);
         for(int i = 0; i < ITERATIONS; i++) {
+            if(i % 2 == 0) {
+                iterationKernel.setArg(1, vectorField);
+                iterationKernel.setArg(2, vectorField2);
+            } else {
+                iterationKernel.setArg(1, vectorField2);
+                iterationKernel.setArg(2, vectorField);
+            }
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(SIZE_X,SIZE_Y,SIZE_Z),
+                    NullRange
+            );
         }
 
         // Read the result in some way
