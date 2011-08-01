@@ -66,7 +66,9 @@ int main(void) {
         Kernel iterationKernel = Kernel(program, "GVFIteration");
 
         // Load volume to GPU
-        Image3D volume = Image3D(context, CL_MEM_READ, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        float * voxels = parseRawFile(FILENAME);
+        Image3D volume = Image3D(context, CL_MEM_READ | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
+        delete[] voxels;
 
         // Run initialization kernel
         Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CLFLOAT), SIZE_X, SIZE_Y, SIZE_Z);
@@ -116,3 +118,38 @@ int main(void) {
 
    return 0;
 }
+
+float * parseRawFile(char * filename, Image3D * volume) {
+    // Parse the specified raw file and transfer it to the device
+    int rawDataSize = SIZE_X*SIZE_Y*SIZE_Z;
+
+    uchar * rawVoxels = new uchar[rawDataSize];
+    FILE * file = fopen(filename, "rb");
+    if(file == NULL) {
+        printf("File not found: %s\n", filename);
+        exit(-1);
+    }
+
+    fread(rawVoxels, sizeof(uchar), rawDataSize, file);
+
+    // Find min and max
+    int min = 256;
+    int max = 0;
+    for(int i = 0; i < rawDataSize; i++) {
+        if(rawVoxels[i] > max)
+            max = rawVoxels[i];
+
+        if(rawVoxels[i] < min)
+            min = rawVoxels[i];
+
+    }
+
+    // Normalize result
+    float * voxels = new float[rawDataSize];
+    for(int i = 0; i < rawDataSize; i++) {
+        voxels[i] = (float)(rawVoxels[i] - min) / (max - min);
+    }
+    delete[] rawVoxels;
+
+    return voxels;
+} 
