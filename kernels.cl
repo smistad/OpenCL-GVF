@@ -1,4 +1,5 @@
 #pragma OPENCL EXTENSION cl_khr_3d_image_writes : enable
+#pragma OPENCL EXTENSION cl_amd_printf : enable
 
 
 __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
@@ -46,7 +47,7 @@ __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only 
 
     float4 laplacian = -6*vector + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
 
-    vector += mu * laplacian + (vector - init_vector)*init_vector.w;
+    vector += mu * laplacian - (vector - init_vector)*init_vector.w;
 
     write_imagef(write_vector_field, pos, vector);
 }
@@ -56,8 +57,8 @@ __kernel void GVFResult(__write_only image3d_t result, __read_only image3d_t vec
 
     int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
     float4 vector = read_imagef(vectorField, sampler, pos);
-    vector.w = 0;
-    float magnitude = length(vector);
+    //vector.w = 0;
+    float magnitude = sqrt(vector.x*vector.x + vector.y*vector.y + vector.z*vector.z);
     if(magnitude > 1)
         magnitude = 1;
     write_imagef(result, pos, magnitude);
