@@ -32,7 +32,7 @@ float * parseRawFile(char * filename) {
     fread(rawVoxels, sizeof(uchar), rawDataSize, file);
 
     // Find min and max
-    int min = 256;
+    int min = 257;
     int max = 0;
     for(int i = 0; i < rawDataSize; i++) {
         if(rawVoxels[i] > max)

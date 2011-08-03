@@ -10,18 +10,38 @@ __kernel void GVFInit(__read_only image3d_t volume, __write_only image3d_t vecto
     // Calculate gradient using a 1D central difference for each dimension, with spacing 1
     int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
 
-    float f = read_imagef(volume, sampler, pos).x;
-    float fx1 = read_imagef(volume, sampler, pos + (int4)(1,0,0,0)).x;
-    float fx_1 = read_imagef(volume, sampler, pos - (int4)(1,0,0,0)).x;
-    float fy1 = read_imagef(volume, sampler, pos + (int4)(0,1,0,0)).x;
-    float fy_1 = read_imagef(volume, sampler, pos - (int4)(0,1,0,0)).x;
-    float fz1 = read_imagef(volume, sampler, pos + (int4)(0,0,1,0)).x;
-    float fz_1 = read_imagef(volume, sampler, pos - (int4)(0,0,1,0)).x;
+    float f100 = read_imagef(volume, sampler, pos + (int4)(1,0,0,0)).x;
+    float f_100 = read_imagef(volume, sampler, pos - (int4)(1,0,0,0)).x;
+    float f010 = read_imagef(volume, sampler, pos + (int4)(0,1,0,0)).x;
+    float f0_10 = read_imagef(volume, sampler, pos - (int4)(0,1,0,0)).x;
+    float f001 = read_imagef(volume, sampler, pos + (int4)(0,0,1,0)).x;
+    float f00_1 = read_imagef(volume, sampler, pos - (int4)(0,0,1,0)).x;
+
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
+    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
 
     float4 gradient = {
-        fx1 - 2*f + fx_1,
-        fy1 - 2*f + fy_1,
-        fz1 - 2*f + fz_1,
+        0, 
+        0,
+        4*(f00_1 - f001) + 2*(f10_1 + f01_1 + f_10_1 + f0_1_1 - f101 - f011 - f_101 - f0_11) + f00_1 + f11_1 + f1_1_1 + f_11_1 - f001 - f111 - f1_11 + f_111,
         0};
 
     gradient.w = gradient.x*gradient.x + gradient.y*gradient.y + gradient.z*gradient.z;
