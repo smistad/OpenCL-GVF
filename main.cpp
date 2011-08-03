@@ -8,15 +8,57 @@
 #include <fstream>
 #include <utility>
 
-#define MU = 0.05
-#define ITERATIONS 500
-#define FILENAME test.raw
+#define MU 0.05f
+#define ITERATIONS 20
+#define FILENAME "aneurism.raw"
 #define SIZE_X 256
 #define SIZE_Y 256
 #define SIZE_Z 256
 
 using namespace cl;
+typedef unsigned char uchar;
 
+float * parseRawFile(char * filename) {
+    // Parse the specified raw file
+    int rawDataSize = SIZE_X*SIZE_Y*SIZE_Z;
+
+    uchar * rawVoxels = new uchar[rawDataSize];
+    FILE * file = fopen(filename, "rb");
+    if(file == NULL) {
+        printf("File not found: %s\n", filename);
+        exit(-1);
+    }
+
+    fread(rawVoxels, sizeof(uchar), rawDataSize, file);
+
+    // Find min and max
+    int min = 256;
+    int max = 0;
+    for(int i = 0; i < rawDataSize; i++) {
+        if(rawVoxels[i] > max)
+            max = rawVoxels[i];
+
+        if(rawVoxels[i] < min)
+            min = rawVoxels[i];
+
+    }
+
+    std::cout << "Min: " << min << " Max: " << max << std::endl;
+
+    // Normalize result
+    float * voxels = new float[rawDataSize];
+    for(int i = 0; i < rawDataSize; i++) {
+        voxels[i] = (float)(rawVoxels[i] - min) / (max - min);
+    }
+    delete[] rawVoxels;
+
+    return voxels;
+} 
+
+void writeToRaw(float * voxels, char * filename) {
+    FILE * file = fopen(filename, "wb");
+    fwrite(voxels, sizeof(float), SIZE_X*SIZE_Y*SIZE_Z, file);
+}
 
 int main(void) {
    try { 
@@ -64,14 +106,16 @@ int main(void) {
         // Create Kernels
         Kernel initKernel = Kernel(program, "GVFInit");
         Kernel iterationKernel = Kernel(program, "GVFIteration");
+        Kernel resultKernel = Kernel(program, "GVFResult");
 
         // Load volume to GPU
+        std::cout << "Reading RAW file " << FILENAME << std::endl;
         float * voxels = parseRawFile(FILENAME);
-        Image3D volume = Image3D(context, CL_MEM_READ | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
+        Image3D volume = Image3D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
         delete[] voxels;
 
         // Run initialization kernel
-        Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CLFLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
         initKernel.setArg(0, volume);
         initKernel.setArg(1, initVectorField);
 
@@ -79,37 +123,67 @@ int main(void) {
                 initKernel,
                 NullRange,
                 NDRange(SIZE_X,SIZE_Y,SIZE_Z),
-                Nullrange
+                NullRange
         );
 
         // Delete volume from device
-        volume.release();
+        //volume.~Image3D();
 
         // copy vector field and create double buffer
-        Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CLFLOAT), SIZE_X, SIZE_Y, SIZE_Z);
-        Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CLFLOAT), SIZE_X, SIZE_Y, SIZE_Z);
-        queue.enqueueCopyImage(initVectorField, vectorField);
+        Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        //Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        cl::size_t<3> offset;
+        offset[0] = 0;
+        offset[1] = 0;
+        offset[2] = 0;
+        cl::size_t<3> region;
+        region[0] = SIZE_X;
+        region[1] = SIZE_Y;
+        region[2] = SIZE_Z;
+        queue.enqueueCopyImage(initVectorField, vectorField, offset, offset, region);
 
+        //queue.enqueueCopyImage(initVectorField, vectorField2, offset, offset, region);
+        queue.finish();
+        std::cout << "Running iterations..." << std::endl; 
         // Run iterations
         iterationKernel.setArg(0, initVectorField);
-        iterationKernel.setArg(3, MU);
+        float mu = MU;
+        iterationKernel.setArg(3, mu);
+
         for(int i = 0; i < ITERATIONS; i++) {
             if(i % 2 == 0) {
                 iterationKernel.setArg(1, vectorField);
-                iterationKernel.setArg(2, vectorField2);
+                iterationKernel.setArg(2, vectorField);
             } else {
-                iterationKernel.setArg(1, vectorField2);
+                iterationKernel.setArg(1, vectorField);
                 iterationKernel.setArg(2, vectorField);
             }
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
                     NDRange(SIZE_X,SIZE_Y,SIZE_Z),
-                    NullRange
+                    NDRange(1,1,1)
             );
         }
+        queue.finish();
 
-        // Read the result in some way
+        // Read the result in some way (maybe write to a seperate raw file)
+        volume = Image3D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        resultKernel.setArg(0, volume);
+        resultKernel.setArg(1, vectorField);
+        queue.enqueueNDRangeKernel(
+                resultKernel,
+                NullRange,
+                NDRange(SIZE_X, SIZE_Y, SIZE_Z),
+                NullRange
+        );
+        queue.finish();
+        voxels = new float[SIZE_X*SIZE_Y*SIZE_Z];
+        std::cout << "Reading vector field from device..." << std::endl;
+        queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
+        std::cout << "Writing vector field to RAW file..." << std::endl;
+        writeToRaw(voxels, "result.raw");
+        delete[] voxels;
 
     } catch(Error error) {
        std::cout << error.what() << "(" << error.err() << ")" << std::endl;
@@ -118,38 +192,3 @@ int main(void) {
 
    return 0;
 }
-
-float * parseRawFile(char * filename, Image3D * volume) {
-    // Parse the specified raw file and transfer it to the device
-    int rawDataSize = SIZE_X*SIZE_Y*SIZE_Z;
-
-    uchar * rawVoxels = new uchar[rawDataSize];
-    FILE * file = fopen(filename, "rb");
-    if(file == NULL) {
-        printf("File not found: %s\n", filename);
-        exit(-1);
-    }
-
-    fread(rawVoxels, sizeof(uchar), rawDataSize, file);
-
-    // Find min and max
-    int min = 256;
-    int max = 0;
-    for(int i = 0; i < rawDataSize; i++) {
-        if(rawVoxels[i] > max)
-            max = rawVoxels[i];
-
-        if(rawVoxels[i] < min)
-            min = rawVoxels[i];
-
-    }
-
-    // Normalize result
-    float * voxels = new float[rawDataSize];
-    for(int i = 0; i < rawDataSize; i++) {
-        voxels[i] = (float)(rawVoxels[i] - min) / (max - min);
-    }
-    delete[] rawVoxels;
-
-    return voxels;
-} 

@@ -50,3 +50,15 @@ __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only 
 
     write_imagef(write_vector_field, pos, vector);
 }
+
+
+__kernel void GVFResult(__write_only image3d_t result, __read_only image3d_t vectorField) {
+
+    int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
+    float4 vector = read_imagef(vectorField, sampler, pos);
+    vector.w = 0;
+    float magnitude = length(vector);
+    if(magnitude > 1)
+        magnitude = 1;
+    write_imagef(result, pos, magnitude);
+}
