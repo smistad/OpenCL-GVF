@@ -17,31 +17,11 @@ __kernel void GVFInit(__read_only image3d_t volume, __write_only image3d_t vecto
     float f001 = read_imagef(volume, sampler, pos + (int4)(0,0,1,0)).x;
     float f00_1 = read_imagef(volume, sampler, pos - (int4)(0,0,1,0)).x;
 
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
-    float f110 = read_imagef(volume, sampler, pos + (int4)(1,1,0,0)).x;
 
     float4 gradient = {
-        0, 
-        0,
-        4*(f00_1 - f001) + 2*(f10_1 + f01_1 + f_10_1 + f0_1_1 - f101 - f011 - f_101 - f0_11) + f00_1 + f11_1 + f1_1_1 + f_11_1 - f001 - f111 - f1_11 + f_111,
+        0.5*(f100-f_100), 
+        0.5*(f010-f0_10),
+        0.5*(f001-f00_1),
         0};
 
     gradient.w = gradient.x*gradient.x + gradient.y*gradient.y + gradient.z*gradient.z;
