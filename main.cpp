@@ -9,11 +9,11 @@
 #include <utility>
 
 #define MU 0.15f
-#define ITERATIONS 200
-#define FILENAME "aneurism.raw"
-#define SIZE_X 256
-#define SIZE_Y 256
-#define SIZE_Z 256
+#define ITERATIONS 1
+#define FILENAME "hydrogenAtom.raw"
+#define SIZE_X 128
+#define SIZE_Y 128
+#define SIZE_Z 128
 
 using namespace cl;
 typedef unsigned char uchar;
@@ -131,7 +131,7 @@ int main(void) {
 
         // copy vector field and create double buffer
         Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
-        //Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
         cl::size_t<3> offset;
         offset[0] = 0;
         offset[1] = 0;
@@ -153,9 +153,9 @@ int main(void) {
         for(int i = 0; i < ITERATIONS; i++) {
             if(i % 2 == 0) {
                 iterationKernel.setArg(1, vectorField);
-                iterationKernel.setArg(2, vectorField);
+                iterationKernel.setArg(2, vectorField2);
             } else {
-                iterationKernel.setArg(1, vectorField);
+                iterationKernel.setArg(1, vectorField2);
                 iterationKernel.setArg(2, vectorField);
             }
             queue.enqueueNDRangeKernel(
