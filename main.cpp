@@ -8,8 +8,8 @@
 #include <fstream>
 #include <utility>
 
-#define MU 0.05f
-#define ITERATIONS 20
+#define MU 0.15f
+#define ITERATIONS 200
 #define FILENAME "aneurism.raw"
 #define SIZE_X 256
 #define SIZE_Y 256
