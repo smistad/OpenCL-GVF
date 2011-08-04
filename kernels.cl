@@ -57,9 +57,6 @@ __kernel void GVFResult(__write_only image3d_t result, __read_only image3d_t vec
 
     int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
     float4 vector = read_imagef(vectorField, sampler, pos);
-    //vector.w = 0;
-    float magnitude = sqrt(vector.x*vector.x + vector.y*vector.y + vector.z*vector.z);
-    if(magnitude > 1)
-        magnitude = 1;
-    write_imagef(result, pos, magnitude);
+    vector.w = 0;
+    write_imagef(result, pos, length(vector));
 }
