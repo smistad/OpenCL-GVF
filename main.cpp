@@ -8,12 +8,12 @@
 #include <fstream>
 #include <utility>
 
-#define MU 0.15f
-#define ITERATIONS 1
-#define FILENAME "hydrogenAtom.raw"
-#define SIZE_X 128
-#define SIZE_Y 128
-#define SIZE_Z 128
+#define MU 0.1f
+#define ITERATIONS 100
+#define FILENAME "aneurism.raw"
+#define SIZE_X 256
+#define SIZE_Y 256
+#define SIZE_Z 256
 
 using namespace cl;
 typedef unsigned char uchar;
@@ -115,7 +115,7 @@ int main(void) {
         delete[] voxels;
 
         // Run initialization kernel
-        Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_SNORM_INT16), SIZE_X, SIZE_Y, SIZE_Z);
         initKernel.setArg(0, volume);
         initKernel.setArg(1, initVectorField);
 
@@ -130,8 +130,8 @@ int main(void) {
         //volume.~Image3D();
 
         // copy vector field and create double buffer
-        Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
-        Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_SNORM_INT16), SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_SNORM_INT16), SIZE_X, SIZE_Y, SIZE_Z);
         cl::size_t<3> offset;
         offset[0] = 0;
         offset[1] = 0;
