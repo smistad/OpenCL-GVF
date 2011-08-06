@@ -85,17 +85,6 @@ int main(int argc, char ** argv) {
 
         Program program = buildProgramFromSource(context, "kernels.cl");
 
-        // Create Kernels
-        Kernel initKernel = Kernel(program, "GVFInit");
-        Kernel iterationKernel = Kernel(program, "GVFIteration");
-        Kernel resultKernel = Kernel(program, "GVFResult");
-
-        // Load volume to GPU
-        std::cout << "Reading RAW file " << filename << std::endl;
-        float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
-        Image3D volume = Image3D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
-        delete[] voxels;
-
         // Query the size of available memory
         unsigned int memorySize = devices[0].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
 
@@ -107,11 +96,22 @@ int main(int argc, char ** argv) {
             std::cout << "Using 32 bits floats texture storage" << std::endl;
         } else if(memorySize > SIZE_X*SIZE_Y*SIZE_Z*2*4*3) {
             storageFormat = ImageFormat(CL_RGBA, CL_SNORM_INT16);
-            std::cout << "Not enough memory on device for 32 bit floats, using 16bit for texture storage instead." << std::endl;
+            std::cout << "Not enough memory on device for 32 bit floats, using 16bit for texture storage instead (WARNING: Reduced accuracy)." << std::endl;
         } else {
             std::cout << "There is not enough memory on this device to calculate the GVF for this dataset!" << std::endl;
             exit(-1);
         }
+
+        // Create Kernels
+        Kernel initKernel = Kernel(program, "GVFInit");
+        Kernel iterationKernel = Kernel(program, "GVFIteration");
+        Kernel resultKernel = Kernel(program, "GVFResult");
+
+        // Load volume to GPU
+        std::cout << "Reading RAW file " << filename << std::endl;
+        float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D volume = Image3D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
+        delete[] voxels;
 
         // Run initialization kernel
         Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
