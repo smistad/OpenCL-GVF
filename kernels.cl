@@ -27,10 +27,11 @@ __kernel void GVFInit(__read_only image3d_t volume, __write_only image3d_t vecto
 
 __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only image3d_t read_vector_field, __write_only image3d_t write_vector_field, __private float mu) {
 
-    int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
+    int4 writePos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
     
     // Enforce mirror boundary conditions
     int4 size = {get_global_size(0), get_global_size(1), get_global_size(2), 0};
+    int4 pos = writePos;
     pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
     pos = select(pos, size-3, pos == size-1);
    
@@ -68,7 +69,7 @@ __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only 
     vector += mu * laplacian - (vector - init_vector)*init_vector.w;
 
 
-    write_imagef(write_vector_field, pos, vector);
+    write_imagef(write_vector_field, writePos, vector);
 }
 
 __kernel void GVFResult(__write_only image3d_t result, __read_only image3d_t vectorField) {
