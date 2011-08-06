@@ -30,9 +30,9 @@ __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only 
     int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
     
     // Enforce mirror boundary conditions
-    int4 size = (get_global_size(0), get_global_size(1), get_global_size(2), 0);
+    int4 size = {get_global_size(0), get_global_size(1), get_global_size(2), 0};
     pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
-    pos = select(pos, size-3, pos == size);
+    pos = select(pos, size-3, pos == size-1);
    
     /*
     if(pos.x == 0)
@@ -41,14 +41,13 @@ __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only 
         pos.y = 2;
     if(pos.z == 0)
         pos.z = 2;
-    if(pos.x == get_global_size(0))
+    if(pos.x == get_global_size(0)-1)
         pos.x = get_global_size(0)-3;
-    if(pos.y == get_global_size(1))
+    if(pos.y == get_global_size(1)-1)
         pos.y = get_global_size(1)-3;
-    if(pos.z == get_global_size(2))
+    if(pos.z == get_global_size(2)-1)
         pos.z = get_global_size(2)-3;
     
-
     int4 diff = (pos2 != pos);
     if(diff.x+diff.y+diff.z+diff.w > 0)
         printf("iiiik!\n");
@@ -68,6 +67,7 @@ __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only 
 
     vector += mu * laplacian - (vector - init_vector)*init_vector.w;
 
+
     write_imagef(write_vector_field, pos, vector);
 }
 
@@ -76,5 +76,7 @@ __kernel void GVFResult(__write_only image3d_t result, __read_only image3d_t vec
     int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
     float4 vector = read_imagef(vectorField, sampler, pos);
     vector.w = 0;
+    //if(1 < length(vector))
+    //    printf("%f %f %f\n", vector.x, vector.y, vector.z);
     write_imagef(result, pos, length(vector));
 }
