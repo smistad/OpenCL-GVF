@@ -1,5 +1,58 @@
 #include "openCLUtilities.hpp"
 
+
+cl::Context createCLContext(cl_device_type type, bool GLInterop, cl_vendor vendor) {
+        // Get available platforms
+        cl::vector<cl::Platform> platforms;
+        cl::Platform::get(&platforms);
+
+        if(platforms.size() == 0)
+            throw cl::Error(1, "No OpenCL platforms were found");
+
+        cl::Platform platform = platforms[0];
+
+        // Use the preferred platform and create a context
+        cl_context_properties cps[] = { 
+            CL_CONTEXT_PLATFORM, (cl_context_properties)(platform)(), 
+            0 
+        };
+        try {
+        cl::Context context = cl::Context(type, cps);
+
+        return context;
+    } catch(cl::Error error) {
+        throw cl::Error(1, "Failed to create an OpenCL context!");
+    }
+}
+
+cl::Program buildProgramFromSource(cl::Context context, std::string filename) {
+        // Read source file
+        std::ifstream sourceFile(filename.c_str());
+        if(sourceFile.fail()) 
+            throw cl::Error(1, "Failed to open OpenCL source file");
+        std::string sourceCode(
+            std::istreambuf_iterator<char>(sourceFile),
+            (std::istreambuf_iterator<char>()));
+        cl::Program::Sources source(1, std::make_pair(sourceCode.c_str(), sourceCode.length()+1));
+
+        // Make program of the source code in the context
+        cl::Program program = cl::Program(context, source);
+
+        cl::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+    
+        // Build program for these specific devices
+        try{
+            program.build(devices);
+        } catch(cl::Error error) {
+            if(error.err() == CL_BUILD_PROGRAM_FAILURE) {
+                std::cout << "Build log:\t" << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0]) << std::endl;
+            }   
+            throw error;
+        } 
+        return program;
+
+}
+
 char *getCLErrorString(cl_int err) {
     switch (err) {
         case CL_SUCCESS:                          return (char *) "Success!";

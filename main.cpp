@@ -3,13 +3,12 @@
 
 #include <CL/cl.hpp>
 #include "openCLUtilities.hpp"
-#include <iostream>
 #include <string>
-#include <fstream>
+#include <iostream>
 #include <utility>
 
 #define MU 0.1f
-#define ITERATIONS 200
+#define ITERATIONS 10
 #define FILENAME "aneurism.raw"
 #define SIZE_X 256
 #define SIZE_Y 256
@@ -62,46 +61,15 @@ void writeToRaw(float * voxels, char * filename) {
 
 int main(void) {
    try { 
-        // Get available platforms
-        vector<Platform> platforms;
-        Platform::get(&platforms);
+		Context context = createCLContext(CL_DEVICE_TYPE_GPU);
 
-        // Select the default platform and create a context using this platform and the GPU
-        cl_context_properties cps[] = { 
-            CL_CONTEXT_PLATFORM, (cl_context_properties)(platforms[0])(), 
-            0 
-        };
-		Context context = Context( CL_DEVICE_TYPE_GPU, cps);
-
-        // Get a list of devices on this platform
+        // Get a list of devices
 		vector<Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
 
         // Create a command queue and use the first device
         CommandQueue queue = CommandQueue(context, devices[0]);
 
-        // Read source file
-        std::ifstream sourceFile("kernels.cl");
-        if(sourceFile.fail()) {
-            std::cout << "Failed to open OpenCL source file" << std::endl;
-            exit(-1);
-        }
-        std::string sourceCode(
-            std::istreambuf_iterator<char>(sourceFile),
-            (std::istreambuf_iterator<char>()));
-        Program::Sources source(1, std::make_pair(sourceCode.c_str(), sourceCode.length()+1));
-
-        // Make program of the source code in the context
-        Program program = Program(context, source);
-    
-        // Build program for these specific devices
-        try{
-            program.build(devices);
-        } catch(Error error) {
-            if(error.err() == CL_BUILD_PROGRAM_FAILURE) {
-                std::cout << "Build log:\t" << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0]) << std::endl;
-            }   
-            throw error;
-        } 
+        Program program = buildProgramFromSource(context, "kernels.cl");
 
         // Create Kernels
         Kernel initKernel = Kernel(program, "GVFInit");
@@ -130,9 +98,6 @@ int main(void) {
             std::cout << "There is not enough memory on this device to calculate the GVF for this dataset!" << std::endl;
             exit(-1);
         }
-
-
-
 
         // Run initialization kernel
         Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
