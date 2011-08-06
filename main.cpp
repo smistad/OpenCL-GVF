@@ -9,7 +9,7 @@
 #include <utility>
 
 #define MU 0.1f
-#define ITERATIONS 100
+#define ITERATIONS 20
 #define FILENAME "aneurism.raw"
 #define SIZE_X 256
 #define SIZE_Y 256
@@ -114,8 +114,28 @@ int main(void) {
         Image3D volume = Image3D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
         delete[] voxels;
 
+        // Query the size of available memory
+        unsigned int memorySize = devices[0].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
+
+        std::cout << "Available memory on selected device " << memorySize << " bytes "<< std::endl;
+
+        ImageFormat storageFormat;
+        if(memorySize > SIZE_X*SIZE_Y*SIZE_Z*4*4*3) {
+            storageFormat = ImageFormat(CL_RGBA, CL_FLOAT);
+            std::cout << "Using 32 bits floats texture storage" << std::endl;
+        } else if(memorySize > SIZE_X*SIZE_Y*SIZE_Z*2*4*3) {
+            storageFormat = ImageFormat(CL_RGBA, CL_SNORM_INT16);
+            std::cout << "Not enough memory on device for 32 bit floats, using 16bit for texture storage instead." << std::endl;
+        } else {
+            std::cout << "There is not enough memory on this device to calculate the GVF for this dataset!" << std::endl;
+            exit(-1);
+        }
+
+
+
+
         // Run initialization kernel
-        Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_SNORM_INT16), SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
         initKernel.setArg(0, volume);
         initKernel.setArg(1, initVectorField);
 
@@ -130,8 +150,8 @@ int main(void) {
         //volume.~Image3D();
 
         // copy vector field and create double buffer
-        Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_SNORM_INT16), SIZE_X, SIZE_Y, SIZE_Z);
-        Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RGBA, CL_SNORM_INT16), SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
+        Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
         cl::size_t<3> offset;
         offset[0] = 0;
         offset[1] = 0;
@@ -144,7 +164,7 @@ int main(void) {
 
         //queue.enqueueCopyImage(initVectorField, vectorField2, offset, offset, region);
         queue.finish();
-        std::cout << "Running iterations..." << std::endl; 
+        std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
         // Run iterations
         iterationKernel.setArg(0, initVectorField);
         float mu = MU;
