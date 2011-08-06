@@ -9,7 +9,7 @@
 #include <utility>
 
 #define MU 0.1f
-#define ITERATIONS 20
+#define ITERATIONS 200
 #define FILENAME "aneurism.raw"
 #define SIZE_X 256
 #define SIZE_Y 256
