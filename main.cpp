@@ -6,18 +6,13 @@
 #include <string>
 #include <iostream>
 #include <utility>
+#include <math.h>
 
-#define MU 0.1f
-#define ITERATIONS 10
-#define FILENAME "aneurism.raw"
-#define SIZE_X 256
-#define SIZE_Y 256
-#define SIZE_Z 256
 
 using namespace cl;
 typedef unsigned char uchar;
 
-float * parseRawFile(char * filename) {
+float * parseRawFile(char * filename, int SIZE_X, int SIZE_Y, int SIZE_Z) {
     // Parse the specified raw file
     int rawDataSize = SIZE_X*SIZE_Y*SIZE_Z;
 
@@ -54,12 +49,31 @@ float * parseRawFile(char * filename) {
     return voxels;
 } 
 
-void writeToRaw(float * voxels, char * filename) {
+void writeToRaw(float * voxels, char * filename, int SIZE_X, int SIZE_Y, int SIZE_Z) {
     FILE * file = fopen(filename, "wb");
     fwrite(voxels, sizeof(float), SIZE_X*SIZE_Y*SIZE_Z, file);
 }
 
-int main(void) {
+int main(int argc, char ** argv) {
+    char * filename;
+    int SIZE_X, SIZE_Y, SIZE_Z, ITERATIONS;
+    float mu;
+    if(argc > 5) {
+        filename = argv[1];
+        SIZE_X = atoi(argv[2]);
+        SIZE_Y = atoi(argv[3]);
+        SIZE_Z = atoi(argv[4]);
+        mu = atof(argv[5]);
+        if(argc == 7) {
+            ITERATIONS = atoi(argv[6]);
+        } else {
+            ITERATIONS = (int)sqrt(SIZE_X*SIZE_Y*SIZE_Z);
+        }
+    } else {
+        std::cout << "usage: filename of raw file size_x size_y size_z mu [iterations]" << std::endl;
+        exit(-1);
+    }
+
    try { 
 		Context context = createCLContext(CL_DEVICE_TYPE_GPU);
 
@@ -77,8 +91,8 @@ int main(void) {
         Kernel resultKernel = Kernel(program, "GVFResult");
 
         // Load volume to GPU
-        std::cout << "Reading RAW file " << FILENAME << std::endl;
-        float * voxels = parseRawFile(FILENAME);
+        std::cout << "Reading RAW file " << filename << std::endl;
+        float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
         Image3D volume = Image3D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
         delete[] voxels;
 
@@ -132,7 +146,6 @@ int main(void) {
         std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
         // Run iterations
         iterationKernel.setArg(0, initVectorField);
-        float mu = MU;
         iterationKernel.setArg(3, mu);
 
         for(int i = 0; i < ITERATIONS; i++) {
@@ -167,7 +180,7 @@ int main(void) {
         std::cout << "Reading vector field from device..." << std::endl;
         queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
         std::cout << "Writing vector field to RAW file..." << std::endl;
-        writeToRaw(voxels, "result.raw");
+        writeToRaw(voxels, "result.raw", SIZE_X, SIZE_Y, SIZE_Z);
         delete[] voxels;
 
     } catch(Error error) {
