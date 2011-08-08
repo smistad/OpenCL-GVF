@@ -7,44 +7,63 @@
 #include <iostream>
 #include <utility>
 #include <math.h>
+#include <limits.h>
+#include <itkImage.h>
+#include <itkRawImageIO.h>
+#include <itkImageFileReader.h>
+#include <itkImageRegionIterator.h>
+#include <itkImageToVTKImageFilter.h>
+#include <itkImageFileWriter.h>
+#include <QuickView.h>
 
+#include <itkCastImageFilter.h>
+#include <itkRescaleIntensityImageFilter.h>
 
 using namespace cl;
 typedef unsigned char uchar;
 
+/**
+ * Reads a RAW file and normalizes it
+ */
 float * parseRawFile(char * filename, int SIZE_X, int SIZE_Y, int SIZE_Z) {
-    // Parse the specified raw file
-    int rawDataSize = SIZE_X*SIZE_Y*SIZE_Z;
+    itk::RawImageIO<uchar, 3>::Pointer io;
+    io = itk::RawImageIO<uchar, 3>::New();
+    io->SetFileName(filename);
+    io->SetDimensions(0,SIZE_X);
+    io->SetDimensions(1,SIZE_Y);
+    io->SetDimensions(2,SIZE_Z);
+    io->SetHeaderSize(0);
 
-    uchar * rawVoxels = new uchar[rawDataSize];
-    FILE * file = fopen(filename, "rb");
-    if(file == NULL) {
-        printf("File not found: %s\n", filename);
-        exit(-1);
-    }
-
-    fread(rawVoxels, sizeof(uchar), rawDataSize, file);
+    typedef itk::Image<uchar, 3> ImageType;
+    itk::ImageFileReader<ImageType>::Pointer reader;
+    reader = itk::ImageFileReader<ImageType>::New();
+    reader->SetFileName(filename);
+    reader->SetImageIO(io);
+    reader->Update();
 
     // Find min and max
-    int min = 257;
+    int min = INT_MAX;
     int max = 0;
-    for(int i = 0; i < rawDataSize; i++) {
-        if(rawVoxels[i] > max)
-            max = rawVoxels[i];
+    ImageType::Pointer im = reader->GetOutput();
+    itk::ImageRegionIterator<ImageType> it(im, im->GetRequestedRegion() );
+    for(it = it.Begin(); !it.IsAtEnd(); ++it) {
+        if(it.Get() > max)
+            max = it.Get();
 
-        if(rawVoxels[i] < min)
-            min = rawVoxels[i];
+        if(it.Get() < min)
+            min = it.Get();
 
     }
 
     std::cout << "Min: " << min << " Max: " << max << std::endl;
 
     // Normalize result
-    float * voxels = new float[rawDataSize];
-    for(int i = 0; i < rawDataSize; i++) {
-        voxels[i] = (float)(rawVoxels[i] - min) / (max - min);
+    float * voxels = new float[SIZE_X*SIZE_Y*SIZE_Z];
+    it = it.Begin();
+    for(int i = 0; i < SIZE_X*SIZE_Y*SIZE_Z; i++) {
+        voxels[i] = (float)(it.Get() - min) / (max - min);
+        ++it;
     }
-    delete[] rawVoxels;
 
     return voxels;
 } 
@@ -52,6 +71,54 @@ float * parseRawFile(char * filename, int SIZE_X, int SIZE_Y, int SIZE_Z) {
 void writeToRaw(float * voxels, char * filename, int SIZE_X, int SIZE_Y, int SIZE_Z) {
     FILE * file = fopen(filename, "wb");
     fwrite(voxels, sizeof(float), SIZE_X*SIZE_Y*SIZE_Z, file);
+}
+
+/**
+ * Use VTK to display image
+ */
+void displaySlice(float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, int slice) {
+    typedef itk::Image<float, 2> ImageType;
+    ImageType::Pointer image = ImageType::New();
+    ImageType::RegionType region;
+    ImageType::SizeType size;
+    size[0] = SIZE_X;
+    size[1] = SIZE_Y;
+    size[2] = SIZE_Z;
+    region.SetSize(size);
+    image->SetRegions(region);
+    image->Allocate();
+
+    itk::ImageRegionIterator<ImageType> it(image, image->GetRequestedRegion() );
+    int i = 0;
+    for(it = it.Begin(); !it.IsAtEnd(); ++it) {
+        it.Set(voxels[i + SIZE_X*SIZE_Y*slice]);
+        i++;
+    }
+
+    typedef itk::Image<uchar,2> ScalarImageType;
+    typedef itk::ImageFileWriter<ScalarImageType> WriterType;
+    WriterType::Pointer writer = WriterType::New();
+
+    ScalarImageType::Pointer scalarImage = ScalarImageType::New();
+    typedef itk::RescaleIntensityImageFilter< ImageType, ScalarImageType> CastFilterType;
+    CastFilterType::Pointer castFilter = CastFilterType::New();
+    castFilter->SetInput(image);
+    castFilter->SetOutputMaximum(255);
+    castFilter->SetOutputMinimum(0);
+    castFilter->Update();
+
+    writer->SetFileName("test.jpg");
+    writer->SetInput(castFilter->GetOutput());
+    writer->Update();
+
+    /*
+    typedef itk::ImageToVTKImageFilter<ScalarImageType> ConnectorType;
+    ConnectorType::Pointer connector = ConnectorType::New();
+    connector->SetInput(castFilter->GetOutput());
+    QuickView viewer;
+    viewer.AddImage(connector->GetOutput());
+    viewer.Visualize();
+    */
 }
 
 int main(int argc, char ** argv) {
@@ -181,6 +248,7 @@ int main(int argc, char ** argv) {
         queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
         std::cout << "Writing vector field to RAW file..." << std::endl;
         writeToRaw(voxels, "result.raw", SIZE_X, SIZE_Y, SIZE_Z);
+        displaySlice(voxels, SIZE_X,SIZE_Y,SIZE_Y,100);
         delete[] voxels;
 
     } catch(Error error) {
