@@ -27,41 +27,43 @@ __kernel void GVFInit(__read_only image3d_t volume, __write_only image3d_t vecto
 
 __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only image3d_t read_vector_field, __write_only image3d_t write_vector_field, __private float mu) {
 
-    int4 writePos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
+    int4 writePos = {
+        get_global_id(0)-(get_group_id(0)*2+1), 
+        get_global_id(1)-(get_group_id(1)*2+1), 
+        get_global_id(2)-(get_group_id(2)*2+1), 
+        0
+    };
+    int3 localPos = {get_local_id(0), get_local_id(1), get_local_id(2)};
     
     // Enforce mirror boundary conditions
-    int4 size = {get_global_size(0), get_global_size(1), get_global_size(2), 0};
-    int4 pos = writePos;
-    pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
-    pos = select(pos, size-3, pos == size-1);
+    //int4 size = {get_global_size(0), get_global_size(1), get_global_size(2), 0};
+    //int4 pos = writePos;
+    //pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
+    //pos = select(pos, size-3, pos == size-1);
    
-    /*
-    if(pos.x == 0)
-        pos.x = 2;
-    if(pos.y == 0)
-        pos.y = 2;
-    if(pos.z == 0)
-        pos.z = 2;
-    if(pos.x == get_global_size(0)-1)
-        pos.x = get_global_size(0)-3;
-    if(pos.y == get_global_size(1)-1)
-        pos.y = get_global_size(1)-3;
-    if(pos.z == get_global_size(2)-1)
-        pos.z = get_global_size(2)-3;
-    
-    int4 diff = (pos2 != pos);
-    if(diff.x+diff.y+diff.z+diff.w > 0)
-        printf("iiiik!\n");
-    */
+    // Allocate shared memory
+    __local float4 sharedMemory[6][6][6];
 
-    float4 vector = read_imagef(read_vector_field, sampler, pos);
-    float4 fx1 = read_imagef(read_vector_field, sampler, pos + (int4)(1,0,0,0));
-    float4 fx_1 = read_imagef(read_vector_field, sampler, pos - (int4)(1,0,0,0));
-    float4 fy1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,1,0,0));
-    float4 fy_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,1,0,0));
-    float4 fz1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,0,1,0));
-    float4 fz_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,0,1,0));
-    float4 init_vector = read_imagef(init_vector_field, sampler, pos);
+    // Read into shared memory
+    sharedMemory[localPos.x][localPos.y][localPos.z] = read_imagef(read_vector_field, sampler, writePos);
+
+    // Synchronize the threads in the group
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    int3 comp = (localPos == (int3)(0,0,0)) +
+        (localPos == (int3)(get_local_size(0)-1,get_local_size(1)-1,get_local_size(2)-1));
+
+
+    if(comp.x+comp.y+comp.z == 0) {
+    // Load data from shared memory and do calculations
+    float4 vector = sharedMemory[localPos.x][localPos.y][localPos.z];
+    float4 fx1 = sharedMemory[localPos.x+1][localPos.y][localPos.z];
+    float4 fx_1 = sharedMemory[localPos.x-1][localPos.y][localPos.z];
+    float4 fy1 = sharedMemory[localPos.x][localPos.y+1][localPos.z];
+    float4 fy_1 = sharedMemory[localPos.x][localPos.y-1][localPos.z];
+    float4 fz1 = sharedMemory[localPos.x][localPos.y][localPos.z+1];
+    float4 fz_1 = sharedMemory[localPos.x][localPos.y][localPos.z-1];
+    float4 init_vector = read_imagef(init_vector_field, sampler, writePos); // should read from pos
 
     // Update the vector field: Calculate Laplacian using a 3D central difference scheme
     float4 laplacian = -6*vector + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
@@ -70,6 +72,7 @@ __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only 
 
 
     write_imagef(write_vector_field, writePos, vector);
+    }
 }
 
 __kernel void GVFResult(__write_only image3d_t result, __read_only image3d_t vectorField) {
