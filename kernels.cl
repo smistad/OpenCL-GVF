@@ -47,31 +47,32 @@ __kernel void GVFIteration(__read_only image3d_t init_vector_field, __read_only 
     // Read into shared memory
     sharedMemory[localPos.x][localPos.y][localPos.z] = read_imagef(read_vector_field, sampler, writePos);
 
+    int3 comp = (localPos == (int3)(0,0,0)) +
+        (localPos == (int3)(get_local_size(0)-1,get_local_size(1)-1,get_local_size(2)-1));
+
     // Synchronize the threads in the group
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    int3 comp = (localPos == (int3)(0,0,0)) +
-        (localPos == (int3)(get_local_size(0)-1,get_local_size(1)-1,get_local_size(2)-1));
 
 
     if(comp.x+comp.y+comp.z == 0) {
     // Load data from shared memory and do calculations
-    float4 vector = sharedMemory[localPos.x][localPos.y][localPos.z];
-    float4 fx1 = sharedMemory[localPos.x+1][localPos.y][localPos.z];
-    float4 fx_1 = sharedMemory[localPos.x-1][localPos.y][localPos.z];
-    float4 fy1 = sharedMemory[localPos.x][localPos.y+1][localPos.z];
-    float4 fy_1 = sharedMemory[localPos.x][localPos.y-1][localPos.z];
-    float4 fz1 = sharedMemory[localPos.x][localPos.y][localPos.z+1];
-    float4 fz_1 = sharedMemory[localPos.x][localPos.y][localPos.z-1];
+    float3 vector = sharedMemory[localPos.x][localPos.y][localPos.z].xyz;
+    float3 fx1 = sharedMemory[localPos.x+1][localPos.y][localPos.z].xyz;
+    float3 fx_1 = sharedMemory[localPos.x-1][localPos.y][localPos.z].xyz;
+    float3 fy1 = sharedMemory[localPos.x][localPos.y+1][localPos.z].xyz;
+    float3 fy_1 = sharedMemory[localPos.x][localPos.y-1][localPos.z].xyz;
+    float3 fz1 = sharedMemory[localPos.x][localPos.y][localPos.z+1].xyz;
+    float3 fz_1 = sharedMemory[localPos.x][localPos.y][localPos.z-1].xyz;
     float4 init_vector = read_imagef(init_vector_field, sampler, writePos); // should read from pos
 
     // Update the vector field: Calculate Laplacian using a 3D central difference scheme
-    float4 laplacian = -6*vector + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
+    float3 laplacian = -6*vector + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
 
-    vector += mu * laplacian - (vector - init_vector)*init_vector.w;
+    vector += mu * laplacian - (vector - init_vector.xyz)*init_vector.w;
 
 
-    write_imagef(write_vector_field, writePos, vector);
+    write_imagef(write_vector_field, writePos, (float4)(vector.x,vector.y,vector.z,0));
     }
 }
 
