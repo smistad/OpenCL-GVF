@@ -226,8 +226,8 @@ int main(int argc, char ** argv) {
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(6*SIZE_X/4,6*SIZE_Y/4,6*SIZE_Z/4),
-                    NDRange(6,6,6)
+                    NDRange(8*258/6,8*258/6,4*258/2),
+                    NDRange(8,8,4)
             );
         }
         queue.finish();
