@@ -1,5 +1,5 @@
 #pragma OPENCL EXTENSION cl_khr_3d_image_writes : enable
-//#pragma OPENCL EXTENSION cl_amd_printf : enable
+#pragma OPENCL EXTENSION cl_amd_printf : enable
 
 __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
 
@@ -26,6 +26,7 @@ __kernel void GVFInit(__read_only image3d_t volume, __write_only image3d_t vecto
 }
 
 #define LA(x,y,z,w) (x + ((y & 1) << 3) + (w << 4) + ((y & 0x6) << 4) + (z << 7))
+#define LA2(x,y,z) (x + (y<<3) + (z<<6))
 __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVFIteration(__read_only image3d_t init_vector_field, __read_only image3d_t read_vector_field, __write_only image3d_t write_vector_field, __private float mu) {
 
     int4 writePos = {
@@ -43,40 +44,55 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVFIteration(__read_o
     //pos = select(pos, size-3, pos == size-1);
    
     // Allocate shared memory
-    __local float2 sharedMemory[16*4*8];
+    __local float2 sharedMemory[8*4*8];
+	__local float sharedMemorySingle[8*4*8];
 
     // Read into shared memory
     float4 v = read_imagef(read_vector_field, sampler, writePos);
-    sharedMemory[LA(localPos.x,localPos.y,localPos.z, 0)] = v.xy;
-    sharedMemory[LA(localPos.x,localPos.y,localPos.z, 1)] = v.zw;
+    sharedMemory[LA2(localPos.x,localPos.y,localPos.z)] = v.xy;
+    sharedMemorySingle[LA2(localPos.x,localPos.y,localPos.z)] = v.z;
 
+    /*
+    int x = localPos.x;
+    int y = localPos.y;
+    int z = localPos.z;
+    int w = 0;
+    int rowID2 = (LA2(x,y,z) >> 4) & 0x1F;
+    int bankID2 = ((LA2(x,y,z)) & 0xF) << 1;
+    int rowID = (LA2(x,y,z) >> 5) & 0x1F;
+	int bankID = ((LA2(x,y,z)) & 0x1F);
+    printf("Float2s: %d %d %d - %d - %d\n", x,y,z, bankID2, rowID2);
+	printf("Floats: %d %d %d - %d - %d\n", x,y,z, bankID, rowID);
+    */
     int3 comp = (localPos == (int3)(0,0,0)) +
         (localPos == (int3)(get_local_size(0)-1,get_local_size(1)-1,get_local_size(2)-1));
-
+	
     // Synchronize the threads in the group
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    if(comp.x+comp.y+comp.z == 0) {
+    if(comp.x+comp.y+comp.z ==  0) {
     // Load data from shared memory and do calculations
     float4 init_vector = read_imagef(init_vector_field, sampler, writePos); // should read from pos
+
     float3 fx1;
-    fx1.xy = sharedMemory[LA(localPos.x+1,localPos.y,localPos.z, 0)];
-    fx1.z = sharedMemory[LA(localPos.x+1,localPos.y,localPos.z, 1)].x;
+    fx1.xy = sharedMemory[LA2(localPos.x+1,localPos.y,localPos.z)];
+    fx1.z = sharedMemorySingle[LA2(localPos.x+1,localPos.y,localPos.z)];
     float3 fx_1;
-    fx_1.xy = sharedMemory[LA(localPos.x-1,localPos.y,localPos.z, 0)];
-    fx_1.z = sharedMemory[LA(localPos.x-1,localPos.y,localPos.z, 1)].x;
+    fx_1.xy = sharedMemory[LA2(localPos.x-1,localPos.y,localPos.z)];
+    fx_1.z = sharedMemorySingle[LA2(localPos.x-1,localPos.y,localPos.z)];
     float3 fy1;
-    fy1.xy = sharedMemory[LA(localPos.x,localPos.y+1,localPos.z, 0)];
-    fy1.z = sharedMemory[LA(localPos.x,localPos.y+1,localPos.z, 1)].x;
+    fy1.xy = sharedMemory[LA2(localPos.x,localPos.y+1,localPos.z)];
+    fy1.z = sharedMemorySingle[LA2(localPos.x,localPos.y+1,localPos.z)];
     float3 fy_1;
-    fy_1.xy = sharedMemory[LA(localPos.x,localPos.y-1,localPos.z, 0)];
-    fy_1.z = sharedMemory[LA(localPos.x,localPos.y-1,localPos.z, 1)].x;
+    fy_1.xy = sharedMemory[LA2(localPos.x,localPos.y-1,localPos.z)];
+    fy_1.z = sharedMemorySingle[LA2(localPos.x,localPos.y-1,localPos.z)];
     float3 fz1;
-    fz1.xy = sharedMemory[LA(localPos.x,localPos.y,localPos.z+1, 0)];
-    fz1.z = sharedMemory[LA(localPos.x,localPos.y,localPos.z+1, 1)].x;
+    fz1.xy = sharedMemory[LA2(localPos.x,localPos.y,localPos.z+1)];
+    fz1.z = sharedMemorySingle[LA2(localPos.x,localPos.y,localPos.z+1)];
     float3 fz_1;
-    fz_1.xy = sharedMemory[LA(localPos.x,localPos.y,localPos.z-1, 0)];
-    fz_1.z = sharedMemory[LA(localPos.x,localPos.y,localPos.z-1, 1)].x;
+    fz_1.xy = sharedMemory[LA2(localPos.x,localPos.y,localPos.z-1)];
+    fz_1.z = sharedMemorySingle[LA2(localPos.x,localPos.y,localPos.z-1)];
+
     // Update the vector field: Calculate Laplacian using a 3D central difference scheme
     float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
 
