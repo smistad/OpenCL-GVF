@@ -44,13 +44,14 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVFIteration(__read_o
     //pos = select(pos, size-3, pos == size-1);
    
     // Allocate shared memory
-    __local float2 sharedMemory[8*4*8];
-	__local float sharedMemorySingle[8*4*8];
+    __local float2 sharedMemory[256];
+	__local float sharedMemorySingle[256];
 
     // Read into shared memory
     float4 v = read_imagef(read_vector_field, sampler, writePos);
-    sharedMemory[LA2(localPos.x,localPos.y,localPos.z)] = v.xy;
-    sharedMemorySingle[LA2(localPos.x,localPos.y,localPos.z)] = v.z;
+    uint pos = LA2(localPos.x,localPos.y,localPos.z);
+    sharedMemory[pos]= v.xy;
+    sharedMemorySingle[pos] = v.z;
 
     /*
     int x = localPos.x;
@@ -65,41 +66,41 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVFIteration(__read_o
 	printf("Floats: %d %d %d - %d - %d\n", x,y,z, bankID, rowID);
     */
     int3 comp = (localPos == (int3)(0,0,0)) +
-        (localPos == (int3)(get_local_size(0)-1,get_local_size(1)-1,get_local_size(2)-1));
+        (localPos == (int3)(7,7,3));
 	
     // Synchronize the threads in the group
     barrier(CLK_LOCAL_MEM_FENCE);
 
     if(comp.x+comp.y+comp.z ==  0) {
-    // Load data from shared memory and do calculations
-    float4 init_vector = read_imagef(init_vector_field, sampler, writePos); // should read from pos
+        // Load data from shared memory and do calculations
+        float4 init_vector = read_imagef(init_vector_field, sampler, writePos); // should read from pos
 
-    float3 fx1;
-    fx1.xy = sharedMemory[LA2(localPos.x+1,localPos.y,localPos.z)];
-    fx1.z = sharedMemorySingle[LA2(localPos.x+1,localPos.y,localPos.z)];
-    float3 fx_1;
-    fx_1.xy = sharedMemory[LA2(localPos.x-1,localPos.y,localPos.z)];
-    fx_1.z = sharedMemorySingle[LA2(localPos.x-1,localPos.y,localPos.z)];
-    float3 fy1;
-    fy1.xy = sharedMemory[LA2(localPos.x,localPos.y+1,localPos.z)];
-    fy1.z = sharedMemorySingle[LA2(localPos.x,localPos.y+1,localPos.z)];
-    float3 fy_1;
-    fy_1.xy = sharedMemory[LA2(localPos.x,localPos.y-1,localPos.z)];
-    fy_1.z = sharedMemorySingle[LA2(localPos.x,localPos.y-1,localPos.z)];
-    float3 fz1;
-    fz1.xy = sharedMemory[LA2(localPos.x,localPos.y,localPos.z+1)];
-    fz1.z = sharedMemorySingle[LA2(localPos.x,localPos.y,localPos.z+1)];
-    float3 fz_1;
-    fz_1.xy = sharedMemory[LA2(localPos.x,localPos.y,localPos.z-1)];
-    fz_1.z = sharedMemorySingle[LA2(localPos.x,localPos.y,localPos.z-1)];
+        float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
+        pos += 1; // x+1 
+        fx1.xy = sharedMemory[pos];
+        fx1.z = sharedMemorySingle[pos];
+        pos -= 2; // x-1
+        fx_1.xy = sharedMemory[pos];
+        fx_1.z = sharedMemorySingle[pos];
+        pos += 1 + 8; // y+1
+        fy1.xy = sharedMemory[pos];
+        fy1.z = sharedMemorySingle[pos];
+        pos -= 16; // y-1
+        fy_1.xy = sharedMemory[pos];
+        fy_1.z = sharedMemorySingle[pos];
+        pos += 8 + 64; // z+1
+        fz1.xy = sharedMemory[pos];
+        fz1.z = sharedMemorySingle[pos];
+        pos -= 128; // z-1
+        fz_1.xy = sharedMemory[pos];
+        fz_1.z = sharedMemorySingle[pos];
 
-    // Update the vector field: Calculate Laplacian using a 3D central difference scheme
-    float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
+        // Update the vector field: Calculate Laplacian using a 3D central difference scheme
+        float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
 
-    v.xyz += mu * laplacian - (v.xyz - init_vector.xyz)*init_vector.w;
+        v.xyz += mu * laplacian - (v.xyz - init_vector.xyz)*init_vector.w;
 
-
-    write_imagef(write_vector_field, writePos, v);
+        write_imagef(write_vector_field, writePos, v);
     }
 }
 
