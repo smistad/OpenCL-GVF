@@ -1,6 +1,7 @@
 #define __NO_STD_VECTOR // Use cl::vector instead of STL version
 #define __CL_ENABLE_EXCEPTIONS
 
+#include <time.h>
 #include <CL/cl.hpp>
 #include "openCLUtilities.hpp"
 #include <string>
@@ -15,7 +16,6 @@
 #include <itkImageToVTKImageFilter.h>
 #include <itkImageFileWriter.h>
 #include <QuickView.h>
-
 #include <itkCastImageFilter.h>
 #include <itkRescaleIntensityImageFilter.h>
 
@@ -71,6 +71,81 @@ float * parseRawFile(char * filename, int SIZE_X, int SIZE_Y, int SIZE_Z) {
 void writeToRaw(float * voxels, char * filename, int SIZE_X, int SIZE_Y, int SIZE_Z) {
     FILE * file = fopen(filename, "wb");
     fwrite(voxels, sizeof(float), SIZE_X*SIZE_Y*SIZE_Z, file);
+}
+
+
+/**
+ * Read Image and normalize it
+ */
+float * parseImageFile(char * filename, int SIZE_X, int SIZE_Y) {
+    typedef itk::Image<float, 2> ImageType;
+    itk::ImageFileReader<ImageType>::Pointer reader;
+    reader = itk::ImageFileReader<ImageType>::New();
+    reader->SetFileName(filename);
+    reader->Update();
+    //
+    // Find min and max
+    int min = INT_MAX;
+    int max = 0;
+    ImageType::Pointer im = reader->GetOutput();
+    itk::ImageRegionIterator<ImageType> it(im, im->GetRequestedRegion() );
+    for(it = it.Begin(); !it.IsAtEnd(); ++it) {
+        if(it.Get() > max)
+            max = it.Get();
+
+        if(it.Get() < min)
+            min = it.Get();
+
+    }
+
+    std::cout << "Min: " << min << " Max: " << max << std::endl;
+
+    // Normalize result
+    float * voxels = new float[SIZE_X*SIZE_Y];
+    it = it.Begin();
+    for(int i = 0; i < SIZE_X*SIZE_Y; i++) {
+        voxels[i] = (float)(it.Get() - min) / (max - min);
+        ++it;
+    }
+
+    return voxels;
+
+}
+
+void writeImage(float * pixels, int SIZE_X, int SIZE_Y) {
+
+    typedef itk::Image<float, 2> ImageType;
+    ImageType::Pointer image = ImageType::New();
+    ImageType::RegionType region;
+    ImageType::SizeType size;
+    size[0] = SIZE_X;
+    size[1] = SIZE_Y;
+    region.SetSize(size);
+    image->SetRegions(region);
+    image->Allocate();
+
+    itk::ImageRegionIterator<ImageType> it(image, image->GetRequestedRegion() );
+    int i = 0;
+    for(it = it.Begin(); !it.IsAtEnd(); ++it) {
+        it.Set(pixels[i]);
+        i++;
+    }
+
+    typedef itk::Image<uchar,2> ScalarImageType;
+    typedef itk::ImageFileWriter<ScalarImageType> WriterType;
+    WriterType::Pointer writer = WriterType::New();
+
+    ScalarImageType::Pointer scalarImage = ScalarImageType::New();
+    typedef itk::RescaleIntensityImageFilter< ImageType, ScalarImageType> CastFilterType;
+    CastFilterType::Pointer castFilter = CastFilterType::New();
+    castFilter->SetInput(image);
+    castFilter->SetOutputMaximum(255);
+    castFilter->SetOutputMinimum(0);
+    castFilter->Update();
+
+    writer->SetFileName("output.jpg");
+    writer->SetInput(castFilter->GetOutput());
+    writer->Update();
 }
 
 /**
@@ -157,7 +232,10 @@ int main(int argc, char ** argv) {
 
         std::cout << "Available memory on selected device " << memorySize << " bytes "<< std::endl;
 
+        bool run3D = false;
+        
         ImageFormat storageFormat;
+        if(run3D) {
         if(memorySize > SIZE_X*SIZE_Y*SIZE_Z*4*4*3) {
             storageFormat = ImageFormat(CL_RGBA, CL_FLOAT);
             std::cout << "Using 32 bits floats texture storage" << std::endl;
@@ -170,13 +248,16 @@ int main(int argc, char ** argv) {
         }
 
         // Create Kernels
-        Kernel initKernel = Kernel(program, "GVFInit");
-        Kernel iterationKernel = Kernel(program, "GVFIteration");
-        Kernel resultKernel = Kernel(program, "GVFResult");
+        Kernel initKernel = Kernel(program, "GVF3DInit");
+        Kernel iterationKernel = Kernel(program, "GVF3DIteration");
+        Kernel resultKernel = Kernel(program, "GVF3DResult");
 
         // Load volume to GPU
         std::cout << "Reading RAW file " << filename << std::endl;
         float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
+
+        
+
         Image3D volume = Image3D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
         delete[] voxels;
 
@@ -250,6 +331,90 @@ int main(int argc, char ** argv) {
         writeToRaw(voxels, "result.raw", SIZE_X, SIZE_Y, SIZE_Z);
         displaySlice(voxels, SIZE_X,SIZE_Y,SIZE_Y,100);
         delete[] voxels;
+        } else { // 2D!
+
+            // Create kernels
+            Kernel initKernel = Kernel(program, "GVF2DInit");
+            Kernel iterationKernel = Kernel(program, "GVF2DIteration");
+            Kernel resultKernel = Kernel(program, "GVF2DResult");
+
+            filename = "input.png";
+            // Load volume to GPU
+            std::cout << "Reading image file " << filename << std::endl;
+            float * voxels = parseImageFile(filename, SIZE_X, SIZE_Y);
+
+            clock_t start = clock();
+
+            Image2D volume = Image2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, 0, voxels);
+            delete[] voxels;
+
+            storageFormat = ImageFormat(CL_RG, CL_SNORM_INT16);
+            Image2D initVectorField = Image2D(context, CL_MEM_READ_WRITE, storageFormat, 512, 512);
+
+            // Run initialization kernel
+            initKernel.setArg(0, volume);
+            initKernel.setArg(1, initVectorField);
+
+            queue.enqueueNDRangeKernel(
+                    initKernel,
+                    NullRange,
+                    NDRange(SIZE_X,SIZE_Y),
+                    NullRange
+            );
+
+            // copy vector field and create double buffer
+            Image2D vectorField = Image2D(context, CL_MEM_READ_WRITE,storageFormat, 512, 512);
+            Image2D vectorField2 = Image2D(context, CL_MEM_READ_WRITE,storageFormat, 512, 512);
+            cl::size_t<3> offset;
+            offset[0] = 0;
+            offset[1] = 0;
+            offset[2] = 0;
+            cl::size_t<3> region;
+            region[0] = SIZE_X;
+            region[1] = SIZE_Y;
+            region[2] = 1;
+            queue.enqueueCopyImage(initVectorField, vectorField, offset, offset, region);
+            queue.finish();
+
+            iterationKernel.setArg(0, initVectorField);
+            iterationKernel.setArg(3, mu);
+
+            for(int i = 0; i < ITERATIONS; i++) {
+                if(i % 2 == 0) {
+                    iterationKernel.setArg(1, vectorField);
+                    iterationKernel.setArg(2, vectorField2);
+                } else {
+                    iterationKernel.setArg(1, vectorField2);
+                    iterationKernel.setArg(2, vectorField);
+                }
+                queue.enqueueNDRangeKernel(
+                        iterationKernel,
+                        NullRange,
+                        NDRange(16*518/14, 16*518/14),
+                        NDRange(16,16)
+                );
+            }
+            queue.finish();
+
+            // Read the result in some way (maybe write to a seperate raw file)
+            volume = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y);
+            resultKernel.setArg(0, volume);
+            resultKernel.setArg(1, vectorField);
+            queue.enqueueNDRangeKernel(
+                    resultKernel,
+                    NullRange,
+                    NDRange(SIZE_X, SIZE_Y),
+                    NullRange
+            );
+            queue.finish();
+            voxels = new float[SIZE_X*SIZE_Y];
+            std::cout << "Reading vector field from device..." << std::endl;
+            queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
+            std::cout << "Processing finished: " << (double)(clock()-start)/CLOCKS_PER_SEC << " seconds used " << std::endl;
+            std::cout << "Writing vector field to RAW file..." << std::endl;
+            writeImage(voxels, SIZE_X,SIZE_Y);
+            delete[] voxels;
+        }
 
     } catch(Error error) {
        std::cout << error.what() << "(" << error.err() << ")" << std::endl;
