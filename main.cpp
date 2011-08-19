@@ -200,17 +200,22 @@ int main(int argc, char ** argv) {
     char * filename;
     int SIZE_X, SIZE_Y, SIZE_Z, ITERATIONS;
     float mu;
-    if(argc > 5) {
+    bool run3D;
+    if(argc == 7) {
         filename = argv[1];
         SIZE_X = atoi(argv[2]);
         SIZE_Y = atoi(argv[3]);
         SIZE_Z = atoi(argv[4]);
         mu = atof(argv[5]);
-        if(argc == 7) {
-            ITERATIONS = atoi(argv[6]);
-        } else {
-            ITERATIONS = (int)sqrt(SIZE_X*SIZE_Y*SIZE_Z);
-        }
+        ITERATIONS = atoi(argv[6]);
+        run3D = true;
+    } else if(argc == 6) {
+        filename = argv[1];
+        SIZE_X = atoi(argv[2]);
+        SIZE_Y = atoi(argv[3]);
+        mu = atof(argv[4]);
+        ITERATIONS = atoi(argv[5]);
+        run3D = false;
     } else {
         std::cout << "usage: filename of raw file size_x size_y size_z mu [iterations]" << std::endl;
         exit(-1);
@@ -232,7 +237,6 @@ int main(int argc, char ** argv) {
 
         std::cout << "Available memory on selected device " << memorySize << " bytes "<< std::endl;
 
-        bool run3D = false;
         
         ImageFormat storageFormat;
         if(run3D) {
@@ -338,7 +342,6 @@ int main(int argc, char ** argv) {
             Kernel iterationKernel = Kernel(program, "GVF2DIteration");
             Kernel resultKernel = Kernel(program, "GVF2DResult");
 
-            filename = "input.png";
             // Load volume to GPU
             std::cout << "Reading image file " << filename << std::endl;
             float * voxels = parseImageFile(filename, SIZE_X, SIZE_Y);
@@ -349,7 +352,7 @@ int main(int argc, char ** argv) {
             delete[] voxels;
 
             storageFormat = ImageFormat(CL_RG, CL_SNORM_INT16);
-            Image2D initVectorField = Image2D(context, CL_MEM_READ_WRITE, storageFormat, 512, 512);
+            Image2D initVectorField = Image2D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y);
 
             // Run initialization kernel
             initKernel.setArg(0, volume);
@@ -363,8 +366,8 @@ int main(int argc, char ** argv) {
             );
 
             // copy vector field and create double buffer
-            Image2D vectorField = Image2D(context, CL_MEM_READ_WRITE,storageFormat, 512, 512);
-            Image2D vectorField2 = Image2D(context, CL_MEM_READ_WRITE,storageFormat, 512, 512);
+            Image2D vectorField = Image2D(context, CL_MEM_READ_WRITE,storageFormat, SIZE_X, SIZE_Y);
+            Image2D vectorField2 = Image2D(context, CL_MEM_READ_WRITE,storageFormat, SIZE_X, SIZE_Y);
             cl::size_t<3> offset;
             offset[0] = 0;
             offset[1] = 0;
@@ -379,6 +382,15 @@ int main(int argc, char ** argv) {
             iterationKernel.setArg(0, initVectorField);
             iterationKernel.setArg(3, mu);
 
+            // Find a SIZE_X and SIZE_Y that is divisable by 14
+            int rangeX = SIZE_X;
+            int rangeY = SIZE_Y;
+            while(rangeX % 14 != 0)
+                rangeX++;
+
+            while(rangeY % 14 != 0)
+                rangeY++;
+
             for(int i = 0; i < ITERATIONS; i++) {
                 if(i % 2 == 0) {
                     iterationKernel.setArg(1, vectorField);
@@ -390,7 +402,7 @@ int main(int argc, char ** argv) {
                 queue.enqueueNDRangeKernel(
                         iterationKernel,
                         NullRange,
-                        NDRange(16*518/14, 16*518/14),
+                        NDRange(16*rangeX/14, 16*rangeY/14),
                         NDRange(16,16)
                 );
             }
