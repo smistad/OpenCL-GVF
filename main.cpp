@@ -13,9 +13,7 @@
 #include <itkRawImageIO.h>
 #include <itkImageFileReader.h>
 #include <itkImageRegionIterator.h>
-#include <itkImageToVTKImageFilter.h>
 #include <itkImageFileWriter.h>
-#include <QuickView.h>
 #include <itkCastImageFilter.h>
 #include <itkRescaleIntensityImageFilter.h>
 
@@ -300,6 +298,16 @@ int main(int argc, char ** argv) {
         iterationKernel.setArg(0, initVectorField);
         iterationKernel.setArg(3, mu);
 
+        int rangeX = SIZE_X;
+        int rangeY = SIZE_Y;
+        int rangeZ = SIZE_Z;
+        while(rangeX % 6 != 0)
+            rangeX++;
+        while(rangeY % 6 != 0)
+            rangeY++;
+        while(rangeZ % 2 != 0)
+            rangeZ++;
+
         for(int i = 0; i < ITERATIONS; i++) {
             if(i % 2 == 0) {
                 iterationKernel.setArg(1, vectorField);
@@ -311,7 +319,7 @@ int main(int argc, char ** argv) {
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(8*258/6,8*258/6,4*258/2),
+                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
                     NDRange(8,8,4)
             );
         }
