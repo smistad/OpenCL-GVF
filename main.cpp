@@ -238,9 +238,8 @@ int main(int argc, char ** argv) {
         ImageFormat storageFormat;
         if(run3D) {
 
-            bool writeToTexture = false;
+            bool writeToTexture = true;
 
-            Program program = buildProgramFromSource(context, "3DkernelsNO_WRITE_TEX.cl");
 
             if(memorySize > SIZE_X*SIZE_Y*SIZE_Z*4*4*3) {
                 storageFormat = ImageFormat(CL_RGBA, CL_FLOAT);
@@ -253,6 +252,12 @@ int main(int argc, char ** argv) {
                 exit(-1);
             }
 
+            Program program;
+            if(writeToTexture) {
+                program = buildProgramFromSource(context, "3Dkernels.cl");
+            } else {
+                program = buildProgramFromSource(context, "3DkernelsNO_WRITE_TEX.cl");
+            }
             // Create Kernels
             Kernel initKernel = Kernel(program, "GVF3DInit");
             Kernel iterationKernel = Kernel(program, "GVF3DIteration");
