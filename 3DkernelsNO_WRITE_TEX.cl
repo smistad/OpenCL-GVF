@@ -4,7 +4,6 @@ __kernel void GVF3DInit(__read_only image3d_t volume, __global short * vector_fi
     // Calculate gradient using a 1D central difference for each dimension, with spacing 1
     int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
 
-    
     float f100 = read_imagef(volume, sampler, pos + (int4)(1,0,0,0)).x;
     float f_100 = read_imagef(volume, sampler, pos - (int4)(1,0,0,0)).x;
     float f010 = read_imagef(volume, sampler, pos + (int4)(0,1,0,0)).x;
@@ -18,29 +17,24 @@ __kernel void GVF3DInit(__read_only image3d_t volume, __global short * vector_fi
         0.5f*(f001-f00_1)
         };
 
-    short3 converted = (short3)(convert_short_sat_rte(gradient.x * 32767.0f),
-            convert_short_sat_rte(gradient.y * 32767.0f),
-            convert_short_sat_rte(gradient.z * 32767.0f)
-        );
+    short3 converted = convert_short3_sat_rte(gradient * 32767.0f);
     vstore3(converted, pos.x+pos.y*get_global_size(0)+pos.z*get_global_size(0)*get_global_size(1), vector_field);
 }
 
 #define LA3D(x,y,z) (x + (y<<3) + (z<<6))
-__kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__global short * init_vector_field, __global short * read_vector_field, __global short * write_vector_field, __private float mu) {
+__kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__global short const * restrict init_vector_field, __global short const * restrict read_vector_field, __global short * write_vector_field, __private float mu) {
 
-    int4 writePos = {
+    int3 writePos = {
         get_global_id(0)-(get_group_id(0)*2+1), 
         get_global_id(1)-(get_group_id(1)*2+1), 
-        get_global_id(2)-(get_group_id(2)*2+1), 
-        0
+        get_global_id(2)-(get_group_id(2)*2+1) 
     };
+    if(writePos.x > 255 || writePos.y > 255 || writePos.z > 255
+            || writePos.x < 0 || writePos.y < 0 || writePos.z < 0)
+        writePos = (int3)(50, 50, 50);
     int3 localPos = {get_local_id(0), get_local_id(1), get_local_id(2)};
     
-    // Enforce mirror boundary conditions
-    //int4 size = {get_global_size(0), get_global_size(1), get_global_size(2), 0};
-    //int4 pos = writePos;
-    //pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
-    //pos = select(pos, size-3, pos == size-1);
+    // TODO: Enforce mirror boundary conditions
    
     // Allocate shared memory
     __local float2 sharedMemory[256];
@@ -48,26 +42,11 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__glob
 
     // Read into shared memory
     short3 tempV = vload3(writePos.x+writePos.y*256+writePos.z*256*256, read_vector_field);
-    float3 v = (float3)(
-            max(-1.0f, (float)tempV.x / 32767.0f),
-            max(-1.0f, (float)tempV.y / 32767.0f),
-            max(-1.0f, (float)tempV.z / 32767.0f));
-    const uint pos = LA3D(localPos.x,localPos.y,localPos.z);
-    sharedMemory[pos]= v.xy;
-    sharedMemorySingle[pos] = v.z;
+    float3 v = max((float3)(-1.0f,-1.0f,-1.0f), 
+                convert_float3(tempV) / 32767.0f);
+    sharedMemory[LA3D(localPos.x,localPos.y,localPos.z)]= v.xy;
+    sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z)] = v.z;
 
-    /*
-    int x = localPos.x;
-    int y = localPos.y;
-    int z = localPos.z;
-    int w = 0;
-    int rowID2 = (LA(x,y,z) >> 4) & 0x1F;
-    int bankID2 = ((LA(x,y,z)) & 0xF) << 1;
-    int rowID = (LA(x,y,z) >> 5) & 0x1F;
-	int bankID = ((LA(x,y,z)) & 0x1F);
-    printf("Float2s: %d %d %d - %d - %d\n", x,y,z, bankID2, rowID2);
-	printf("Floats: %d %d %d - %d - %d\n", x,y,z, bankID, rowID);
-    */
     int3 comp = (localPos == (int3)(0,0,0)) +
         (localPos == (int3)(7,7,3));
 	
@@ -77,41 +56,30 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__glob
     if(comp.x+comp.y+comp.z ==  0) {
         // Load data from shared memory and do calculations
         short3 tempInit = vload3(writePos.x+writePos.y*256+writePos.z*256*256, init_vector_field);
-        float3 init_vector = (float3)(
-                max(-1.0f, (float)tempInit.x / 32767.0f),
-                max(-1.0f, (float)tempInit.y / 32767.0f),
-                max(-1.0f, (float)tempInit.z / 32767.0f));
+        float3 init_vector = max((float3)(-1.0f,-1.0f,-1.0f), 
+                convert_float3(tempInit) / 32767.0f);
 
         float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
-        // x+1 
-        fx1.xy = sharedMemory[pos+1];
-        fx1.z = sharedMemorySingle[pos+1];
-        // x-1
-        fx_1.xy = sharedMemory[pos-1];
-        fx_1.z = sharedMemorySingle[pos-1];
-        // y+1
-        fy1.xy = sharedMemory[pos+8];
-        fy1.z = sharedMemorySingle[pos+8];
-        // y-1
-        fy_1.xy = sharedMemory[pos-8];
-        fy_1.z = sharedMemorySingle[pos-8];
-        // z+1
-        fz1.xy = sharedMemory[pos+64];
-        fz1.z = sharedMemorySingle[pos+64];
-        // z-1
-        fz_1.xy = sharedMemory[pos-64];
-        fz_1.z = sharedMemorySingle[pos-64];
+        fx1.xy = sharedMemory[LA3D(localPos.x+1,localPos.y,localPos.z)];
+        fx1.z = sharedMemorySingle[LA3D(localPos.x+1,localPos.y,localPos.z)];
+        fx_1.xy = sharedMemory[LA3D(localPos.x-1,localPos.y,localPos.z)];
+        fx_1.z = sharedMemorySingle[LA3D(localPos.x-1,localPos.y,localPos.z)];
+        fy1.xy = sharedMemory[LA3D(localPos.x,localPos.y+1,localPos.z)];
+        fy1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y+1,localPos.z)];
+        fy_1.xy = sharedMemory[LA3D(localPos.x,localPos.y-1,localPos.z)];
+        fy_1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y-1,localPos.z)];
+        fz1.xy = sharedMemory[LA3D(localPos.x,localPos.y,localPos.z+1)];
+        fz1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z+1)];
+        fz_1.xy = sharedMemory[LA3D(localPos.x,localPos.y,localPos.z-1)];
+        fz_1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z-1)];
 
         // Update the vector field: Calculate Laplacian using a 3D central difference scheme
         float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
 
-        v.xyz += mu * laplacian - (v.xyz - init_vector.xyz)*(init_vector.x*init_vector.x+init_vector.y*init_vector.y + init_vector.z*init_vector.z);
+        v += mu * laplacian - (v - init_vector)*(init_vector.x*init_vector.x+init_vector.y*init_vector.y + init_vector.z*init_vector.z);
 
 
-        tempV = (short3)(convert_short_sat_rte(v.x * 32767.0f),
-            convert_short_sat_rte(v.y * 32767.0f),
-            convert_short_sat_rte(v.z * 32767.0f)
-        );
+        tempV = convert_short3_sat_rte(v * 32767.0f);
         vstore3(tempV, writePos.x + writePos.y*256 + writePos.z*256*256, write_vector_field);
     }
 }

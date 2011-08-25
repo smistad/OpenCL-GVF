@@ -34,6 +34,10 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
         get_global_id(2)-(get_group_id(2)*2+1), 
         0
     };
+    if(writePos.x > 255 || writePos.y > 255 || writePos.z > 255
+            || writePos.x < 0 || writePos.y < 0 || writePos.z < 0)
+        writePos = (int4)(50, 50, 50, 0);
+
     int3 localPos = {get_local_id(0), get_local_id(1), get_local_id(2)};
     
     // Enforce mirror boundary conditions
@@ -48,9 +52,8 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
 
     // Read into shared memory
     float4 v = read_imagef(read_vector_field, sampler, writePos);
-    const uint pos = LA3D(localPos.x,localPos.y,localPos.z);
-    sharedMemory[pos]= v.xy;
-    sharedMemorySingle[pos] = v.z;
+    sharedMemory[LA3D(localPos.x,localPos.y,localPos.z)]= v.xy;
+    sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z)] = v.z;
 
     /*
     int x = localPos.x;
@@ -75,24 +78,18 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
         float4 init_vector = read_imagef(init_vector_field, sampler, writePos); // should read from pos
 
         float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
-        // x+1 
-        fx1.xy = sharedMemory[pos+1];
-        fx1.z = sharedMemorySingle[pos+1];
-        // x-1
-        fx_1.xy = sharedMemory[pos-1];
-        fx_1.z = sharedMemorySingle[pos-1];
-        // y+1
-        fy1.xy = sharedMemory[pos+8];
-        fy1.z = sharedMemorySingle[pos+8];
-        // y-1
-        fy_1.xy = sharedMemory[pos-8];
-        fy_1.z = sharedMemorySingle[pos-8];
-        // z+1
-        fz1.xy = sharedMemory[pos+64];
-        fz1.z = sharedMemorySingle[pos+64];
-        // z-1
-        fz_1.xy = sharedMemory[pos-64];
-        fz_1.z = sharedMemorySingle[pos-64];
+        fx1.xy = sharedMemory[LA3D(localPos.x+1,localPos.y,localPos.z)];
+        fx1.z = sharedMemorySingle[LA3D(localPos.x+1,localPos.y,localPos.z)];
+        fx_1.xy = sharedMemory[LA3D(localPos.x-1,localPos.y,localPos.z)];
+        fx_1.z = sharedMemorySingle[LA3D(localPos.x-1,localPos.y,localPos.z)];
+        fy1.xy = sharedMemory[LA3D(localPos.x,localPos.y+1,localPos.z)];
+        fy1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y+1,localPos.z)];
+        fy_1.xy = sharedMemory[LA3D(localPos.x,localPos.y-1,localPos.z)];
+        fy_1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y-1,localPos.z)];
+        fz1.xy = sharedMemory[LA3D(localPos.x,localPos.y,localPos.z+1)];
+        fz1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z+1)];
+        fz_1.xy = sharedMemory[LA3D(localPos.x,localPos.y,localPos.z-1)];
+        fz_1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z-1)];
 
         // Update the vector field: Calculate Laplacian using a 3D central difference scheme
         float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
