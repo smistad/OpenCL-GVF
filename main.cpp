@@ -194,6 +194,43 @@ void displaySlice(float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, int slice)
     */
 }
 
+float relativeMagnitudeError(float * voxelsFloat, float * voxels, int size, int channels) {
+    float error;
+    if(channels == 2) {
+        for(int i = 0; i < size; i += 2) {
+            error += abs(sqrt(pow(voxelsFloat[i],2)+pow(voxelsFloat[i+1],2))
+                    - sqrt(pow(voxels[i],2)+pow(voxels[i+1],2)));
+        }
+    } else if(channels == 4) {
+        for(int i = 0; i < size; i += 4) {
+            error += abs(sqrt(pow(voxelsFloat[i],2)+pow(voxelsFloat[i+1],2)+pow(voxelsFloat[i+2],2))
+                    - sqrt(pow(voxels[i],2)+pow(voxels[i+1],2)+pow(voxels[i+2],2)));
+        }
+    }
+
+    return error;
+}
+
+float relativeAngleError(float * voxelsFloat, float * voxels, int size, int channels) {
+    float error;
+    if(channels == 2) {
+        for(int i = 0; i < size; i += 2) {
+            float mag = sqrt(pow(voxelsFloat[i],2)+pow(voxelsFloat[i+1],2))
+                *sqrt(pow(voxels[i],2)+pow(voxels[i+1],2));
+            float dotProd = voxelsFloat[i]*voxels[i]+voxelsFloat[i+1]*voxels[i+1];
+            error += acos(dotProd/mag);
+        }
+    } else if(channels == 4) {
+        for(int i = 0; i < size; i += 4) {
+            float mag = sqrt(pow(voxelsFloat[i],2)+pow(voxelsFloat[i+1],2)+pow(voxelsFloat[i+2],2))
+                    *sqrt(pow(voxels[i],2)+pow(voxels[i+1],2)+pow(voxels[i+2],2));
+            float dotProd = voxelsFloat[i]*voxels[i]+voxelsFloat[i+1]*voxels[i+1]+voxelsFloat[i+2]*voxels[i+2];
+            error += acos(dotProd/mag);
+        }
+    }
+    return error;
+}
+
 int main(int argc, char ** argv) {
     char * filename;
     int SIZE_X, SIZE_Y, SIZE_Z, ITERATIONS;
