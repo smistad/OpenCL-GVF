@@ -231,11 +231,311 @@ float relativeAngleError(float * voxelsFloat, float * voxels, int size, int chan
     return error;
 }
 
+float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, float mu, int ITERATIONS, int datatype) {
+
+    Program program = buildProgramFromSource(context, "2Dkernels.cl");
+
+    // Create kernels
+    Kernel initKernel = Kernel(program, "GVF2DInit");
+    Kernel iterationKernel = Kernel(program, "GVF2DIteration");
+    Kernel resultKernel = Kernel(program, "GVF2DResult");
+
+    // Load volume to GPU
+    clock_t start = clock();
+
+    Image2D volume = Image2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, 0, voxels);
+    delete[] voxels;
+
+    ImageFormat storageFormat = ImageFormat(CL_RG, CL_SNORM_INT16);
+    Image2D initVectorField = Image2D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y);
+
+    // Run initialization kernel
+    initKernel.setArg(0, volume);
+    initKernel.setArg(1, initVectorField);
+
+    queue.enqueueNDRangeKernel(
+            initKernel,
+            NullRange,
+            NDRange(SIZE_X,SIZE_Y),
+            NullRange
+    );
+
+    // copy vector field and create double buffer
+    Image2D vectorField = Image2D(context, CL_MEM_READ_WRITE,storageFormat, SIZE_X, SIZE_Y);
+    Image2D vectorField2 = Image2D(context, CL_MEM_READ_WRITE,storageFormat, SIZE_X, SIZE_Y);
+    cl::size_t<3> offset;
+    offset[0] = 0;
+    offset[1] = 0;
+    offset[2] = 0;
+    cl::size_t<3> region;
+    region[0] = SIZE_X;
+    region[1] = SIZE_Y;
+    region[2] = 1;
+    queue.enqueueCopyImage(initVectorField, vectorField, offset, offset, region);
+    queue.finish();
+
+    iterationKernel.setArg(0, initVectorField);
+    iterationKernel.setArg(3, mu);
+
+    // Find a SIZE_X and SIZE_Y that is divisable by 14
+    int rangeX = SIZE_X;
+    int rangeY = SIZE_Y;
+    while(rangeX % 14 != 0)
+        rangeX++;
+
+    while(rangeY % 14 != 0)
+        rangeY++;
+
+    for(int i = 0; i < ITERATIONS; i++) {
+        if(i % 2 == 0) {
+            iterationKernel.setArg(1, vectorField);
+            iterationKernel.setArg(2, vectorField2);
+        } else {
+            iterationKernel.setArg(1, vectorField2);
+            iterationKernel.setArg(2, vectorField);
+        }
+        queue.enqueueNDRangeKernel(
+                iterationKernel,
+                NullRange,
+                NDRange(16*rangeX/14, 16*rangeY/14),
+                NDRange(16,16)
+        );
+    }
+    queue.finish();
+
+    // Read the result in some way (maybe write to a seperate raw file)
+    volume = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y);
+    resultKernel.setArg(0, volume);
+    resultKernel.setArg(1, vectorField);
+    queue.enqueueNDRangeKernel(
+            resultKernel,
+            NullRange,
+            NDRange(SIZE_X, SIZE_Y),
+            NullRange
+    );
+    queue.finish();
+    voxels = new float[SIZE_X*SIZE_Y];
+    std::cout << "Reading vector field from device..." << std::endl;
+    queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
+    std::cout << "Processing finished: " << (double)(clock()-start)/CLOCKS_PER_SEC << " seconds used " << std::endl;
+    std::cout << "Writing vector field to PNG file..." << std::endl;
+    writeImage(voxels, SIZE_X,SIZE_Y);
+    return voxels;
+}
+
+float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
+    ImageFormat storageFormat = ImageFormat(CL_RGBA, CL_SNORM_INT16);
+    Program program = buildProgramFromSource(context, "3Dkernels.cl");
+
+    // Create Kernels
+    Kernel initKernel = Kernel(program, "GVF3DInit");
+    Kernel iterationKernel = Kernel(program, "GVF3DIteration");
+    Kernel resultKernel = Kernel(program, "GVF3DResult");
+
+    // Load volume to GPU
+    Image3D volume = Image3D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
+    delete[] voxels;
+
+    // Run initialization kernel
+    cl::size_t<3> offset;
+    offset[0] = 0;
+    offset[1] = 0;
+    offset[2] = 0;
+    cl::size_t<3> region;
+    region[0] = SIZE_X;
+    region[1] = SIZE_Y;
+    region[2] = SIZE_Z;
+
+    Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
+    initKernel.setArg(0, volume);
+    initKernel.setArg(1, initVectorField);
+
+    queue.enqueueNDRangeKernel(
+            initKernel,
+            NullRange,
+            NDRange(SIZE_X,SIZE_Y,SIZE_Z),
+            NullRange
+    );
+
+    // Delete volume from device
+    //volume.~Image3D();
+
+    Image3D vectorField, vectorField2;
+    // copy vector field and create double buffer
+    vectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
+    vectorField2 = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
+    queue.enqueueCopyImage(initVectorField, vectorField, offset, offset, region);
+    queue.finish();
+
+    std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
+    // Run iterations
+    iterationKernel.setArg(0, initVectorField);
+    iterationKernel.setArg(3, mu);
+
+    int rangeX = SIZE_X;
+    int rangeY = SIZE_Y;
+    int rangeZ = SIZE_Z;
+    while(rangeX % 6 != 0)
+        rangeX++;
+    while(rangeY % 6 != 0)
+        rangeY++;
+    while(rangeZ % 2 != 0)
+        rangeZ++;
+
+    for(int i = 0; i < ITERATIONS; i++) {
+        if(i % 2 == 0) {
+            iterationKernel.setArg(1, vectorField);
+            iterationKernel.setArg(2, vectorField2);
+        } else {
+            iterationKernel.setArg(1, vectorField2);
+            iterationKernel.setArg(2, vectorField);
+        }
+        queue.enqueueNDRangeKernel(
+                iterationKernel,
+                NullRange,
+                NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+            NDRange(8,8,4)
+        );
+    }
+    queue.finish();
+
+    // Read the result in some way (maybe write to a seperate raw file)
+    volume = Image3D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+    resultKernel.setArg(0, volume);
+    resultKernel.setArg(1, vectorField);
+    queue.enqueueNDRangeKernel(
+            resultKernel,
+            NullRange,
+            NDRange(SIZE_X, SIZE_Y, SIZE_Z),
+            NullRange
+    );
+    queue.finish();
+    voxels = new float[SIZE_X*SIZE_Y*SIZE_Z];
+    std::cout << "Reading vector field from device..." << std::endl;
+    queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
+    std::cout << "Writing vector field to RAW file..." << std::endl;
+    writeToRaw(voxels, "result.raw", SIZE_X, SIZE_Y, SIZE_Z);
+    displaySlice(voxels, SIZE_X,SIZE_Y,SIZE_Y,100);
+    return voxels;
+}
+
+float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
+    
+    Program program = buildProgramFromSource(context, "3DkernelsNO_WRITE_TEX.cl");
+    //
+    // Create Kernels
+    Kernel initKernel = Kernel(program, "GVF3DInit");
+    Kernel iterationKernel = Kernel(program, "GVF3DIteration");
+    Kernel resultKernel = Kernel(program, "GVF3DResult");
+
+    // Load volume to GPU
+    Image3D volume = Image3D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
+    delete[] voxels;
+
+    // Run initialization kernel
+    cl::size_t<3> offset;
+    offset[0] = 0;
+    offset[1] = 0;
+    offset[2] = 0;
+    cl::size_t<3> region;
+    region[0] = SIZE_X;
+    region[1] = SIZE_Y;
+    region[2] = SIZE_Z;
+    
+    Buffer initVectorField = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
+
+    initKernel.setArg(0, volume);
+    initKernel.setArg(1, initVectorField);
+
+    queue.enqueueNDRangeKernel(
+            initKernel,
+            NullRange,
+            NDRange(SIZE_X,SIZE_Y,SIZE_Z),
+            NullRange
+    );
+
+    // Copy init vector field buffer to vectorField buffer and 3D image 
+    Buffer vectorField = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
+    Buffer vectorField2 = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
+
+    queue.enqueueCopyBuffer(initVectorField, vectorField, 0, 0, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
+    queue.finish();
+
+    std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
+    // Run iterations
+    iterationKernel.setArg(0, initVectorField);
+    iterationKernel.setArg(3, mu);
+
+    int rangeX = SIZE_X;
+    int rangeY = SIZE_Y;
+    int rangeZ = SIZE_Z;
+    while(rangeX % 6 != 0)
+        rangeX++;
+    while(rangeY % 6 != 0)
+        rangeY++;
+    while(rangeZ % 2 != 0)
+        rangeZ++;
+
+    for(int i = 0; i < ITERATIONS; i++) {
+        if(i % 2 == 0) {
+            iterationKernel.setArg(1, vectorField);
+            iterationKernel.setArg(2, vectorField2);
+        } else {
+            iterationKernel.setArg(1, vectorField2);
+            iterationKernel.setArg(2, vectorField);
+        }
+        queue.enqueueNDRangeKernel(
+                iterationKernel,
+                NullRange,
+                NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+            NDRange(8,8,4)
+        );
+    }
+    queue.finish();
+
+    // Read the result in some way (maybe write to a seperate raw file)
+    Buffer result = Buffer(context, CL_MEM_WRITE_ONLY, sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z);
+    resultKernel.setArg(0, result);
+    resultKernel.setArg(1, vectorField);
+    queue.enqueueNDRangeKernel(
+            resultKernel,
+            NullRange,
+            NDRange(SIZE_X, SIZE_Y, SIZE_Z),
+            NullRange
+    );
+    queue.finish();
+    voxels = new float[SIZE_X*SIZE_Y*SIZE_Z];
+    std::cout << "Reading vector field from device..." << std::endl;
+    queue.enqueueReadBuffer(result, CL_TRUE, 0, sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z, voxels);
+    std::cout << "Writing vector field to RAW file..." << std::endl;
+    writeToRaw(voxels, "result.raw", SIZE_X, SIZE_Y, SIZE_Z);
+    displaySlice(voxels, SIZE_X,SIZE_Y,SIZE_Y,100);
+    return voxels;
+}
+
 int main(int argc, char ** argv) {
     char * filename;
     int SIZE_X, SIZE_Y, SIZE_Z, ITERATIONS;
     float mu;
-    bool run3D;
+    Context context;
+    CommandQueue queue;
+
+   try { 
+    Context context = createCLContext(CL_DEVICE_TYPE_GPU);
+
+    // Get a list of devices
+    vector<Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+
+    // Create a command queue and use the first device
+    CommandQueue queue = CommandQueue(context, devices[0]);
+
+
+    // Query the size of available memory
+    unsigned int memorySize = devices[0].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
+
+    std::cout << "Available memory on selected device " << memorySize << " bytes "<< std::endl;
+
+
     if(argc == 7) {
         filename = argv[1];
         SIZE_X = atoi(argv[2]);
@@ -243,318 +543,30 @@ int main(int argc, char ** argv) {
         SIZE_Z = atoi(argv[4]);
         mu = atof(argv[5]);
         ITERATIONS = atoi(argv[6]);
-        run3D = true;
+
+        std::cout << "Reading RAW file " << filename << std::endl;
+        float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
+
+        float * output;
+        if(devices[0].getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") > -1) {
+            output = run3DKernels(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, 2);
+        } else {
+            run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, 2);
+        }
     } else if(argc == 6) {
         filename = argv[1];
         SIZE_X = atoi(argv[2]);
         SIZE_Y = atoi(argv[3]);
         mu = atof(argv[4]);
         ITERATIONS = atoi(argv[5]);
-        run3D = false;
+        std::cout << "Reading image file " << filename << std::endl;
+        float * pixels = parseImageFile(filename, SIZE_X, SIZE_Y);
+        float * output = run2DKernels(context, queue, pixels, SIZE_X, SIZE_Y, mu, ITERATIONS, 2);
     } else {
         std::cout << "usage: filename of raw file size_x size_y size_z mu [iterations]" << std::endl;
         exit(-1);
     }
-
-   try { 
-		Context context = createCLContext(CL_DEVICE_TYPE_GPU);
-
-        // Get a list of devices
-		vector<Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
-
-        // Create a command queue and use the first device
-        CommandQueue queue = CommandQueue(context, devices[0]);
-
-
-        // Query the size of available memory
-        unsigned int memorySize = devices[0].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
-
-        std::cout << "Available memory on selected device " << memorySize << " bytes "<< std::endl;
-
         
-        ImageFormat storageFormat;
-        if(run3D) {
-
-            bool writeToTexture = true;
-
-
-            if(memorySize > SIZE_X*SIZE_Y*SIZE_Z*4*4*3) {
-                storageFormat = ImageFormat(CL_RGBA, CL_FLOAT);
-                std::cout << "Using 32 bits floats texture storage" << std::endl;
-            } else if(memorySize > SIZE_X*SIZE_Y*SIZE_Z*2*4*3) {
-                storageFormat = ImageFormat(CL_RGBA, CL_SNORM_INT16);
-                std::cout << "Not enough memory on device for 32 bit floats, using 16bit for texture storage instead (WARNING: Reduced accuracy)." << std::endl;
-            } else {
-                std::cout << "There is not enough memory on this device to calculate the GVF for this dataset!" << std::endl;
-                exit(-1);
-            }
-
-            Program program;
-            if(writeToTexture) {
-                program = buildProgramFromSource(context, "3Dkernels.cl");
-            } else {
-                program = buildProgramFromSource(context, "3DkernelsNO_WRITE_TEX.cl");
-            }
-            // Create Kernels
-            Kernel initKernel = Kernel(program, "GVF3DInit");
-            Kernel iterationKernel = Kernel(program, "GVF3DIteration");
-            Kernel resultKernel = Kernel(program, "GVF3DResult");
-
-            // Load volume to GPU
-            std::cout << "Reading RAW file " << filename << std::endl;
-            float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
-
-        
-            Image3D volume = Image3D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z, 0, 0, voxels);
-            delete[] voxels;
-
-            // Run initialization kernel
-
-            cl::size_t<3> offset;
-            offset[0] = 0;
-            offset[1] = 0;
-            offset[2] = 0;
-            cl::size_t<3> region;
-            region[0] = SIZE_X;
-            region[1] = SIZE_Y;
-            region[2] = SIZE_Z;
-            if(writeToTexture) {
-                Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
-            initKernel.setArg(0, volume);
-            initKernel.setArg(1, initVectorField);
-
-            queue.enqueueNDRangeKernel(
-                    initKernel,
-                    NullRange,
-                    NDRange(SIZE_X,SIZE_Y,SIZE_Z),
-                    NullRange
-            );
-
-            // Delete volume from device
-            //volume.~Image3D();
-
-            Image3D vectorField, vectorField2;
-            // copy vector field and create double buffer
-            vectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
-            vectorField2 = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
-            queue.enqueueCopyImage(initVectorField, vectorField, offset, offset, region);
-            queue.finish();
-
-            std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
-            // Run iterations
-            iterationKernel.setArg(0, initVectorField);
-            iterationKernel.setArg(3, mu);
-
-            int rangeX = SIZE_X;
-            int rangeY = SIZE_Y;
-            int rangeZ = SIZE_Z;
-            while(rangeX % 6 != 0)
-                rangeX++;
-            while(rangeY % 6 != 0)
-                rangeY++;
-            while(rangeZ % 2 != 0)
-                rangeZ++;
-
-            for(int i = 0; i < ITERATIONS; i++) {
-                if(i % 2 == 0) {
-                    iterationKernel.setArg(1, vectorField);
-                    iterationKernel.setArg(2, vectorField2);
-                } else {
-                    iterationKernel.setArg(1, vectorField2);
-                    iterationKernel.setArg(2, vectorField);
-                }
-                queue.enqueueNDRangeKernel(
-                        iterationKernel,
-                        NullRange,
-                        NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
-                    NDRange(8,8,4)
-                );
-            }
-            queue.finish();
-
-            // Read the result in some way (maybe write to a seperate raw file)
-            volume = Image3D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
-            resultKernel.setArg(0, volume);
-            resultKernel.setArg(1, vectorField);
-            queue.enqueueNDRangeKernel(
-                    resultKernel,
-                    NullRange,
-                    NDRange(SIZE_X, SIZE_Y, SIZE_Z),
-                    NullRange
-            );
-            queue.finish();
-            voxels = new float[SIZE_X*SIZE_Y*SIZE_Z];
-            std::cout << "Reading vector field from device..." << std::endl;
-            queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
-            std::cout << "Writing vector field to RAW file..." << std::endl;
-            writeToRaw(voxels, "result.raw", SIZE_X, SIZE_Y, SIZE_Z);
-            displaySlice(voxels, SIZE_X,SIZE_Y,SIZE_Y,100);
-            delete[] voxels;
-            } else { //  NO write to 3D texture
-                Buffer initVectorField = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
-
-                initKernel.setArg(0, volume);
-                initKernel.setArg(1, initVectorField);
-
-                queue.enqueueNDRangeKernel(
-                        initKernel,
-                        NullRange,
-                        NDRange(SIZE_X,SIZE_Y,SIZE_Z),
-                        NullRange
-                );
-
-                // Copy init vector field buffer to vectorField buffer and 3D image 
-                Buffer vectorField = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
-                Buffer vectorField2 = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
-
-                queue.enqueueCopyBuffer(initVectorField, vectorField, 0, 0, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
-                queue.finish();
-
-                std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
-                // Run iterations
-                iterationKernel.setArg(0, initVectorField);
-                iterationKernel.setArg(3, mu);
-
-                int rangeX = SIZE_X;
-                int rangeY = SIZE_Y;
-                int rangeZ = SIZE_Z;
-                while(rangeX % 6 != 0)
-                    rangeX++;
-                while(rangeY % 6 != 0)
-                    rangeY++;
-                while(rangeZ % 2 != 0)
-                    rangeZ++;
-
-                for(int i = 0; i < ITERATIONS; i++) {
-                    if(i % 2 == 0) {
-                        iterationKernel.setArg(1, vectorField);
-                        iterationKernel.setArg(2, vectorField2);
-                    } else {
-                        iterationKernel.setArg(1, vectorField2);
-                        iterationKernel.setArg(2, vectorField);
-                    }
-                    queue.enqueueNDRangeKernel(
-                            iterationKernel,
-                            NullRange,
-                            NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
-                        NDRange(8,8,4)
-                    );
-                }
-                queue.finish();
-
-                // Read the result in some way (maybe write to a seperate raw file)
-                Buffer result = Buffer(context, CL_MEM_WRITE_ONLY, sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z);
-                resultKernel.setArg(0, result);
-                resultKernel.setArg(1, vectorField);
-                queue.enqueueNDRangeKernel(
-                        resultKernel,
-                        NullRange,
-                        NDRange(SIZE_X, SIZE_Y, SIZE_Z),
-                        NullRange
-                );
-                queue.finish();
-                voxels = new float[SIZE_X*SIZE_Y*SIZE_Z];
-                std::cout << "Reading vector field from device..." << std::endl;
-                queue.enqueueReadBuffer(result, CL_TRUE, 0, sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z, voxels);
-                std::cout << "Writing vector field to RAW file..." << std::endl;
-                writeToRaw(voxels, "result.raw", SIZE_X, SIZE_Y, SIZE_Z);
-                displaySlice(voxels, SIZE_X,SIZE_Y,SIZE_Y,100);
-                delete[] voxels;
-            }
-        } else { // 2D!
-
-            Program program = buildProgramFromSource(context, "2Dkernels.cl");
-            // Create kernels
-            Kernel initKernel = Kernel(program, "GVF2DInit");
-            Kernel iterationKernel = Kernel(program, "GVF2DIteration");
-            Kernel resultKernel = Kernel(program, "GVF2DResult");
-
-            // Load volume to GPU
-            std::cout << "Reading image file " << filename << std::endl;
-            float * voxels = parseImageFile(filename, SIZE_X, SIZE_Y);
-
-            clock_t start = clock();
-
-            Image2D volume = Image2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, 0, voxels);
-            delete[] voxels;
-
-            storageFormat = ImageFormat(CL_RG, CL_SNORM_INT16);
-            Image2D initVectorField = Image2D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y);
-
-            // Run initialization kernel
-            initKernel.setArg(0, volume);
-            initKernel.setArg(1, initVectorField);
-
-            queue.enqueueNDRangeKernel(
-                    initKernel,
-                    NullRange,
-                    NDRange(SIZE_X,SIZE_Y),
-                    NullRange
-            );
-
-            // copy vector field and create double buffer
-            Image2D vectorField = Image2D(context, CL_MEM_READ_WRITE,storageFormat, SIZE_X, SIZE_Y);
-            Image2D vectorField2 = Image2D(context, CL_MEM_READ_WRITE,storageFormat, SIZE_X, SIZE_Y);
-            cl::size_t<3> offset;
-            offset[0] = 0;
-            offset[1] = 0;
-            offset[2] = 0;
-            cl::size_t<3> region;
-            region[0] = SIZE_X;
-            region[1] = SIZE_Y;
-            region[2] = 1;
-            queue.enqueueCopyImage(initVectorField, vectorField, offset, offset, region);
-            queue.finish();
-
-            iterationKernel.setArg(0, initVectorField);
-            iterationKernel.setArg(3, mu);
-
-            // Find a SIZE_X and SIZE_Y that is divisable by 14
-            int rangeX = SIZE_X;
-            int rangeY = SIZE_Y;
-            while(rangeX % 14 != 0)
-                rangeX++;
-
-            while(rangeY % 14 != 0)
-                rangeY++;
-
-            for(int i = 0; i < ITERATIONS; i++) {
-                if(i % 2 == 0) {
-                    iterationKernel.setArg(1, vectorField);
-                    iterationKernel.setArg(2, vectorField2);
-                } else {
-                    iterationKernel.setArg(1, vectorField2);
-                    iterationKernel.setArg(2, vectorField);
-                }
-                queue.enqueueNDRangeKernel(
-                        iterationKernel,
-                        NullRange,
-                        NDRange(16*rangeX/14, 16*rangeY/14),
-                        NDRange(16,16)
-                );
-            }
-            queue.finish();
-
-            // Read the result in some way (maybe write to a seperate raw file)
-            volume = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y);
-            resultKernel.setArg(0, volume);
-            resultKernel.setArg(1, vectorField);
-            queue.enqueueNDRangeKernel(
-                    resultKernel,
-                    NullRange,
-                    NDRange(SIZE_X, SIZE_Y),
-                    NullRange
-            );
-            queue.finish();
-            voxels = new float[SIZE_X*SIZE_Y];
-            std::cout << "Reading vector field from device..." << std::endl;
-            queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
-            std::cout << "Processing finished: " << (double)(clock()-start)/CLOCKS_PER_SEC << " seconds used " << std::endl;
-            std::cout << "Writing vector field to RAW file..." << std::endl;
-            writeImage(voxels, SIZE_X,SIZE_Y);
-            delete[] voxels;
-        }
-
     } catch(Error error) {
        std::cout << error.what() << "(" << error.err() << ")" << std::endl;
        std::cout << getCLErrorString(error.err()) << std::endl;
