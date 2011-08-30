@@ -241,8 +241,6 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     Kernel resultKernel = Kernel(program, "GVF2DResult");
 
     // Load volume to GPU
-    clock_t start = clock();
-
     Image2D volume = Image2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, 0, voxels);
     delete[] voxels;
 
@@ -286,6 +284,9 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     while(rangeY % 14 != 0)
         rangeY++;
 
+    Event startEvent;
+    Event event;
+
     for(int i = 0; i < ITERATIONS; i++) {
         if(i % 2 == 0) {
             iterationKernel.setArg(1, vectorField);
@@ -294,14 +295,43 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
             iterationKernel.setArg(1, vectorField2);
             iterationKernel.setArg(2, vectorField);
         }
-        queue.enqueueNDRangeKernel(
-                iterationKernel,
-                NullRange,
-                NDRange(16*rangeX/14, 16*rangeY/14),
-                NDRange(16,16)
-        );
+        if(i == 0) {
+            // Profile first iteration
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(16*rangeX/14, 16*rangeY/14),
+                    NDRange(16,16),
+                    NULL,
+                    &startEvent
+            );
+        } else if(i == ITERATIONS-1) {
+            // Profile last iteration
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(16*rangeX/14, 16*rangeY/14),
+                    NDRange(16,16),
+                    NULL,
+                    &event
+            );
+        } else {
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(16*rangeX/14, 16*rangeY/14),
+                    NDRange(16,16)
+            );
+        }
     }
     queue.finish();
+
+    cl_ulong start, end;
+    event.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
+    event.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_END, &end);
+    std::cout << "One iteration processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
+    startEvent.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
+    std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
     // Read the result in some way (maybe write to a seperate raw file)
     volume = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y);
@@ -317,7 +347,6 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     voxels = new float[SIZE_X*SIZE_Y];
     std::cout << "Reading vector field from device..." << std::endl;
     queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
-    std::cout << "Processing finished: " << (double)(clock()-start)/CLOCKS_PER_SEC << " seconds used " << std::endl;
     std::cout << "Writing vector field to PNG file..." << std::endl;
     writeImage(voxels, SIZE_X,SIZE_Y);
     return voxels;
@@ -382,6 +411,7 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
     while(rangeZ % 2 != 0)
         rangeZ++;
 
+    Event event,startEvent;
     for(int i = 0; i < ITERATIONS; i++) {
         if(i % 2 == 0) {
             iterationKernel.setArg(1, vectorField);
@@ -390,14 +420,44 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
             iterationKernel.setArg(1, vectorField2);
             iterationKernel.setArg(2, vectorField);
         }
-        queue.enqueueNDRangeKernel(
-                iterationKernel,
-                NullRange,
-                NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
-            NDRange(8,8,4)
-        );
+        if(i == 0) {
+            // Profile first iteration
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+                    NDRange(8,8,4),
+                    NULL,
+                    &startEvent
+            );
+        } else if(i == ITERATIONS-1) {
+            // Profile last iteration
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+                    NDRange(8,8,4),
+                    NULL,
+                    &event
+            );
+        } else {
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+                    NDRange(8,8,4)
+            );
+        }
     }
     queue.finish();
+
+    // Do some profiling
+    cl_ulong start, end;
+    event.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
+    event.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_END, &end);
+    std::cout << "One iteration processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
+    startEvent.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
+    std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
     // Read the result in some way (maybe write to a seperate raw file)
     volume = Image3D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
@@ -476,6 +536,7 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
     while(rangeZ % 2 != 0)
         rangeZ++;
 
+    Event event, startEvent;
     for(int i = 0; i < ITERATIONS; i++) {
         if(i % 2 == 0) {
             iterationKernel.setArg(1, vectorField);
@@ -484,14 +545,44 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
             iterationKernel.setArg(1, vectorField2);
             iterationKernel.setArg(2, vectorField);
         }
-        queue.enqueueNDRangeKernel(
-                iterationKernel,
-                NullRange,
-                NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
-            NDRange(8,8,4)
-        );
+        if(i == 0) {
+            // Profile first iteration
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+                    NDRange(8,8,4),
+                    NULL,
+                    &startEvent
+            );
+        } else if(i == ITERATIONS-1) {
+            // Profile last iteration
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+                    NDRange(8,8,4),
+                    NULL,
+                    &event
+            );
+        } else {
+            queue.enqueueNDRangeKernel(
+                    iterationKernel,
+                    NullRange,
+                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+                    NDRange(8,8,4)
+            );
+        }
     }
     queue.finish();
+    
+    // Do some profiling
+    cl_ulong start, end;
+    event.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
+    event.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_END, &end);
+    std::cout << "One iteration processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
+    startEvent.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
+    std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
     // Read the result in some way (maybe write to a seperate raw file)
     Buffer result = Buffer(context, CL_MEM_WRITE_ONLY, sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z);
@@ -515,7 +606,7 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
 
 int main(int argc, char ** argv) {
     char * filename;
-    int SIZE_X, SIZE_Y, SIZE_Z, ITERATIONS;
+    int SIZE_X, SIZE_Y, SIZE_Z, ITERATIONS, bytes;
     float mu;
     Context context;
     CommandQueue queue;
@@ -527,43 +618,45 @@ int main(int argc, char ** argv) {
     vector<Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
 
     // Create a command queue and use the first device
-    CommandQueue queue = CommandQueue(context, devices[0]);
+    CommandQueue queue = CommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE);
 
 
     // Query the size of available memory
     unsigned int memorySize = devices[0].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
 
-    std::cout << "Available memory on selected device " << memorySize << " bytes "<< std::endl;
+    std::cout << "Available memory on selected device " << (double)memorySize/(1024*1024) << " MB "<< std::endl;
 
 
-    if(argc == 7) {
+    if(argc == 8) {
         filename = argv[1];
         SIZE_X = atoi(argv[2]);
         SIZE_Y = atoi(argv[3]);
         SIZE_Z = atoi(argv[4]);
         mu = atof(argv[5]);
         ITERATIONS = atoi(argv[6]);
+        bytes = atoi(argv[7]);
 
         std::cout << "Reading RAW file " << filename << std::endl;
         float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
 
         float * output;
-        if(devices[0].getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") > -1) {
-            output = run3DKernels(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, 2);
+        if((int)devices[0].getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") > 10000) {
+            run3DKernels(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
         } else {
-            run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, 2);
+            run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
         }
-    } else if(argc == 6) {
+    } else if(argc == 7) {
         filename = argv[1];
         SIZE_X = atoi(argv[2]);
         SIZE_Y = atoi(argv[3]);
         mu = atof(argv[4]);
         ITERATIONS = atoi(argv[5]);
+        bytes = atoi(argv[6]);
         std::cout << "Reading image file " << filename << std::endl;
         float * pixels = parseImageFile(filename, SIZE_X, SIZE_Y);
-        float * output = run2DKernels(context, queue, pixels, SIZE_X, SIZE_Y, mu, ITERATIONS, 2);
+        run2DKernels(context, queue, pixels, SIZE_X, SIZE_Y, mu, ITERATIONS, bytes);
     } else {
-        std::cout << "usage: filename of raw file size_x size_y size_z mu [iterations]" << std::endl;
+        std::cout << "usage: filename of raw file size_x size_y size_z mu iterations bytes" << std::endl;
         exit(-1);
     }
         
