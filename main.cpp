@@ -375,9 +375,12 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
     region[1] = SIZE_Y;
     region[2] = SIZE_Z;
 
-    Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
+
+    Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
+    Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RG, CL_SNORM_INT16), SIZE_X, SIZE_Y, SIZE_Z);
     initKernel.setArg(0, volume);
     initKernel.setArg(1, initVectorField);
+    initKernel.setArg(2, vectorField);
 
     queue.enqueueNDRangeKernel(
             initKernel,
@@ -389,12 +392,10 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
     // Delete volume from device
     //volume.~Image3D();
 
-    Image3D vectorField, vectorField2;
     // copy vector field and create double buffer
-    vectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
-    vectorField2 = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
-    queue.enqueueCopyImage(initVectorField, vectorField, offset, offset, region);
-    queue.finish();
+    Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
+    //queue.enqueueCopyImage(initVectorField, vectorField, offset, offset, region);
+    //queue.finish();
 
     std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
     // Run iterations

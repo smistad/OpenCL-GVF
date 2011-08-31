@@ -2,7 +2,7 @@
 
 __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
 
-__kernel void GVF3DInit(__read_only image3d_t volume, __write_only image3d_t vector_field ) {
+__kernel void GVF3DInit(__read_only image3d_t volume, __write_only image3d_t init_vector_field, __write_only image3d_t vector_field ) {
     // Calculate gradient using a 1D central difference for each dimension, with spacing 1
     int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
 
@@ -18,10 +18,10 @@ __kernel void GVF3DInit(__read_only image3d_t volume, __write_only image3d_t vec
         0.5f*(f100-f_100), 
         0.5f*(f010-f0_10),
         0.5f*(f001-f00_1),
-        0};
+        0.5f*(f100-f_100)
+    };
 
-    gradient.w = gradient.x*gradient.x + gradient.y*gradient.y + gradient.z*gradient.z;
-
+    write_imagef(init_vector_field, pos, gradient);
     write_imagef(vector_field, pos, gradient); 
 }
 
@@ -75,7 +75,7 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
 
     if(comp.x+comp.y+comp.z ==  0) {
         // Load data from shared memory and do calculations
-        float4 init_vector = read_imagef(init_vector_field, sampler, writePos); // should read from pos
+        float2 init_vector = read_imagef(init_vector_field, sampler, writePos).xy; // should read from pos
 
         float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
         fx1.xy = sharedMemory[LA3D(localPos.x+1,localPos.y,localPos.z)];
@@ -94,7 +94,8 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
         // Update the vector field: Calculate Laplacian using a 3D central difference scheme
         float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
 
-        v.xyz += mu * laplacian - (v.xyz - init_vector.xyz)*init_vector.w;
+        v.xyz += mu * laplacian - (v.xyz - (float3)(init_vector.x, init_vector.y, v.w))*
+            (init_vector.x*init_vector.x+init_vector.y*init_vector.y+v.w*v.w);
 
         write_imagef(write_vector_field, writePos, v);
     }
