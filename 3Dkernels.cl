@@ -18,7 +18,7 @@ __kernel void GVF3DInit(__read_only image3d_t volume, __write_only image3d_t ini
         0.5f*(f100-f_100), 
         0.5f*(f010-f0_10),
         0.5f*(f001-f00_1),
-        0.5f*(f100-f_100)
+        0.5f*(f001-f00_1)
     };
 
     write_imagef(init_vector_field, pos, gradient);
