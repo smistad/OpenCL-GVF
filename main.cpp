@@ -482,7 +482,7 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
 float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
     
     Program program = buildProgramFromSource(context, "3DkernelsNO_WRITE_TEX.cl");
-    //
+
     // Create Kernels
     Kernel initKernel = Kernel(program, "GVF3DInit");
     Kernel iterationKernel = Kernel(program, "GVF3DIteration");
@@ -502,7 +502,7 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
     region[1] = SIZE_Y;
     region[2] = SIZE_Z;
     
-    Buffer initVectorField = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
+    Buffer initVectorField = Buffer(context, CL_MEM_READ_WRITE, 4*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
 
     initKernel.setArg(0, volume);
     initKernel.setArg(1, initVectorField);
@@ -514,6 +514,10 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
             NullRange
     );
 
+    ImageFormat storageFormat = ImageFormat(CL_RGBA, CL_SNORM_INT16);
+    Image3D initVectorFieldImage = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
+    queue.enqueueCopyBufferToImage(initVectorField, initVectorFieldImage, 0, offset, region);
+
     // Copy init vector field buffer to vectorField buffer and 3D image 
     Buffer vectorField = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
     Buffer vectorField2 = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
@@ -523,7 +527,7 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
 
     std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
     // Run iterations
-    iterationKernel.setArg(0, initVectorField);
+    iterationKernel.setArg(0, initVectorFieldImage);
     iterationKernel.setArg(3, mu);
 
     int rangeX = SIZE_X;
@@ -640,7 +644,7 @@ int main(int argc, char ** argv) {
         float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
 
         float * output;
-        if((int)devices[0].getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") > 10000) {
+        if((int)devices[0].getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") > -1) {
             run3DKernels(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
         } else {
             run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);

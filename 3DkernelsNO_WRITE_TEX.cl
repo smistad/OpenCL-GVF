@@ -11,27 +11,30 @@ __kernel void GVF3DInit(__read_only image3d_t volume, __global short * vector_fi
     float f001 = read_imagef(volume, sampler, pos + (int4)(0,0,1,0)).x;
     float f00_1 = read_imagef(volume, sampler, pos - (int4)(0,0,1,0)).x;
 
-    float3 gradient = {
+    float4 gradient = {
         0.5f*(f100-f_100), 
         0.5f*(f010-f0_10),
-        0.5f*(f001-f00_1)
+        0.5f*(f001-f00_1),
+        0
         };
 
-    short3 converted = convert_short3_sat_rte(gradient * 32767.0f);
-    vstore3(converted, pos.x+pos.y*get_global_size(0)+pos.z*get_global_size(0)*get_global_size(1), vector_field);
+    gradient.w = gradient.x*gradient.x+gradient.y*gradient.y+gradient.z*gradient.z;
+    short4 converted = convert_short4_sat_rte(gradient * 32767.0f);
+    vstore4(converted, pos.x+pos.y*get_global_size(0)+pos.z*get_global_size(0)*get_global_size(1), vector_field);
 }
 
 #define LA3D(x,y,z) (x + (y<<3) + (z<<6))
-__kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__global short const * restrict init_vector_field, __global short const * restrict read_vector_field, __global short * write_vector_field, __private float mu) {
+__kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read_only image3d_t init_vector_field, __global short const * restrict read_vector_field, __global short * write_vector_field, __private float mu) {
 
-    int3 writePos = {
+    int4 writePos = {
         get_global_id(0)-(get_group_id(0)*2+1), 
         get_global_id(1)-(get_group_id(1)*2+1), 
-        get_global_id(2)-(get_group_id(2)*2+1) 
+        get_global_id(2)-(get_group_id(2)*2+1),
+        0
     };
     if(writePos.x > 255 || writePos.y > 255 || writePos.z > 255
             || writePos.x < 0 || writePos.y < 0 || writePos.z < 0)
-        writePos = (int3)(50, 50, 50);
+        writePos = (int4)(50, 50, 50, 0);
     int3 localPos = {get_local_id(0), get_local_id(1), get_local_id(2)};
     
     // TODO: Enforce mirror boundary conditions
@@ -55,9 +58,7 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__glob
 
     if(comp.x+comp.y+comp.z ==  0) {
         // Load data from shared memory and do calculations
-        short3 tempInit = vload3(writePos.x+writePos.y*256+writePos.z*256*256, init_vector_field);
-        float3 init_vector = max((float3)(-1.0f,-1.0f,-1.0f), 
-                convert_float3(tempInit) / 32767.0f);
+        float4 init_vector = read_imagef(init_vector_field, sampler, writePos);
 
         float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
         fx1.xy = sharedMemory[LA3D(localPos.x+1,localPos.y,localPos.z)];
@@ -76,7 +77,7 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__glob
         // Update the vector field: Calculate Laplacian using a 3D central difference scheme
         float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
 
-        v += mu * laplacian - (v - init_vector)*(init_vector.x*init_vector.x+init_vector.y*init_vector.y + init_vector.z*init_vector.z);
+        v += mu * laplacian - (v - init_vector.xyz)*init_vector.w;
 
 
         tempV = convert_short3_sat_rte(v * 32767.0f);
