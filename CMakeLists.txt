@@ -11,15 +11,7 @@ find_package(ITK REQUIRED)
 message("using ${ITK_USE_FILE}")
 include(${ITK_USE_FILE})
 
-find_package(VTK REQUIRED)
-include(${VTK_USE_FILE})
-
-set(ItkVtkGlue_DIR ${PROJECT_SOURCE_DIR}/ItkVtkGlue)
-
-find_package(ItkVtkGlue REQUIRED)
-include(${ItkVtkGlue_USE_FILE})
-
 add_executable(host main.cpp openCLUtilities.cpp)
 
-target_link_libraries(host ItkVtkGlue ${OPENCL_LIBRARIES} ${ITK_LIBRARIES} ${VTK_LIBRARIES})
+target_link_libraries(host ${OPENCL_LIBRARIES} ${ITK_LIBRARIES} )
 
