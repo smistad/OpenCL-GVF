@@ -39,8 +39,6 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
     int4 pos = writePos;
     pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
     pos = select(pos, size-3, pos >= size-1);
-    // Ensure that it don't write outside of the image
-    writePos = select(writePos, size-3, writePos > size-1);
 
     // Allocate shared memory
     __local float2 sharedMemory[256];
@@ -53,8 +51,9 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
     sharedMemory[LA3D(localPos.x,localPos.y,localPos.z)]= v.xy;
     sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z)] = v.z;
 
+    // Ensure that it don't write outside of the image
     int3 comp = (localPos == (int3)(0,0,0)) +
-        (localPos == (int3)(7,7,3));
+        (localPos == (int3)(7,7,3)) + (writePos > size-1).xyz;
 	
     // Synchronize the threads in the group
     barrier(CLK_LOCAL_MEM_FENCE);

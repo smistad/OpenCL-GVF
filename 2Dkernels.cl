@@ -34,8 +34,6 @@ __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__re
     int2 pos = writePos;
     pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
     pos = select(pos, size-3, pos >= size-1);
-    // Ensure that it don't write outside of the image
-    writePos = select(writePos, size-3, writePos > size-1);
 
     // Allocate shared memory
     __local float2 sharedMemory[256];
@@ -44,8 +42,9 @@ __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__re
     float2 v = read_imagef(read_vector_field, sampler, pos).xy;
     sharedMemory[LA2D(localPos.x,localPos.y)]= v;
 
+    // Ensure that it don't write outside of the image
     int2 comp = (localPos == (int2)(0,0)) +
-        (localPos == (int2)(15,15));
+        (localPos == (int2)(15,15)) + (writePos > size-1);
 	
     // Synchronize the threads in the group
     barrier(CLK_LOCAL_MEM_FENCE);
