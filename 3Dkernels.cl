@@ -34,24 +34,22 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
         get_global_id(2)-(get_group_id(2)*2+1), 
         0
     };
-    if(writePos.x > 255 || writePos.y > 255 || writePos.z > 255
-            || writePos.x < 0 || writePos.y < 0 || writePos.z < 0)
-        writePos = (int4)(50, 50, 50, 0);
-
     int3 localPos = {get_local_id(0), get_local_id(1), get_local_id(2)};
     
     // Enforce mirror boundary conditions
-    //int4 size = {get_global_size(0), get_global_size(1), get_global_size(2), 0};
-    //int4 pos = writePos;
-    //pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
-    //pos = select(pos, size-3, pos == size-1);
+    int4 size = {get_image_width(init_vector_field), get_image_height(init_vector_field), get_image_depth(init_vector_field), 0};
+    int4 pos = writePos;
+    pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
+    pos = select(pos, size-3, pos >= size-1);
+    // Ensure that it don't write outside of the image
+    writePos = select(writePos, size-3, writePos > size-1);
    
     // Allocate shared memory
     __local float2 sharedMemory[256];
 	__local float sharedMemorySingle[256];
 
     // Read into shared memory
-    float4 v = read_imagef(read_vector_field, sampler, writePos);
+    float4 v = read_imagef(read_vector_field, sampler, pos);
     sharedMemory[LA3D(localPos.x,localPos.y,localPos.z)]= v.xy;
     sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z)] = v.z;
 
@@ -75,7 +73,7 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
 
     if(comp.x+comp.y+comp.z ==  0) {
         // Load data from shared memory and do calculations
-        float2 init_vector = read_imagef(init_vector_field, sampler, writePos).xy; // should read from pos
+        float2 init_vector = read_imagef(init_vector_field, sampler, pos).xy;
 
         float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
         fx1.xy = sharedMemory[LA3D(localPos.x+1,localPos.y,localPos.z)];

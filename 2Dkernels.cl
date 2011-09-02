@@ -30,12 +30,18 @@ __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__re
     int2 localPos = {get_local_id(0), get_local_id(1)};
     
     // TODO: Enforce mirror boundary conditions
-   
+    int2 size = {get_image_width(init_vector_field), get_image_height(init_vector_field)};
+    int2 pos = writePos;
+    pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
+    pos = select(pos, size-3, pos >= size-1);
+    // Ensure that it don't write outside of the image
+    writePos = select(writePos, size-3, writePos > size-1);
+
     // Allocate shared memory
     __local float2 sharedMemory[256];
 
     // Read into shared memory
-    float2 v = read_imagef(read_vector_field, sampler, writePos).xy;
+    float2 v = read_imagef(read_vector_field, sampler, pos).xy;
     sharedMemory[LA2D(localPos.x,localPos.y)]= v;
 
     int2 comp = (localPos == (int2)(0,0)) +
@@ -46,7 +52,7 @@ __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__re
 
     if(comp.x+comp.y ==  0) {
         // Load data from shared memory and do calculations
-        float2 init_vector = read_imagef(init_vector_field, sampler, writePos).xy; // should read from pos
+        float2 init_vector = read_imagef(init_vector_field, sampler, pos).xy;
 
         float2 fx1, fx_1, fy1, fy_1;
         fx1 = sharedMemory[LA2D(localPos.x+1,localPos.y)];

@@ -16,7 +16,6 @@
 #include <itkImageFileWriter.h>
 #include <itkCastImageFilter.h>
 #include <itkRescaleIntensityImageFilter.h>
-
 using namespace cl;
 typedef unsigned char uchar;
 
