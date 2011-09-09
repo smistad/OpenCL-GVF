@@ -29,27 +29,19 @@ __kernel void GVF3DInit(__read_only image3d_t volume, __write_only image3d_t ini
 __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read_only image3d_t init_vector_field, __read_only image3d_t read_vector_field, __write_only image3d_t write_vector_field, __private float mu) {
 
     int4 writePos = {
-        get_global_id(0)-(get_group_id(0)*2+1), 
-        get_global_id(1)-(get_group_id(1)*2+1), 
-        get_global_id(2)-(get_group_id(2)*2+1), 
+        get_global_id(0),
+        get_global_id(1),
+        get_global_id(2),
         0
     };
-    int3 localPos = {get_local_id(0), get_local_id(1), get_local_id(2)};
-    
     // Enforce mirror boundary conditions
     int4 size = {get_image_width(init_vector_field), get_image_height(init_vector_field), get_image_depth(init_vector_field), 0};
     int4 pos = writePos;
     pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
     pos = select(pos, size-3, pos >= size-1);
    
-    // Allocate shared memory
-    __local float2 sharedMemory[256];
-	__local float sharedMemorySingle[256];
-
     // Read into shared memory
     float4 v = read_imagef(read_vector_field, sampler, pos);
-    sharedMemory[LA3D(localPos.x,localPos.y,localPos.z)]= v.xy;
-    sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z)] = v.z;
 
     /*
     int x = localPos.x;
@@ -63,30 +55,16 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
     printf("Float2s: %d %d %d - %d - %d\n", x,y,z, bankID2, rowID2);
 	printf("Floats: %d %d %d - %d - %d\n", x,y,z, bankID, rowID);
     */
-    // Ensure that it don't write outside of the image
-    int3 comp = (localPos == (int3)(0,0,0)) +
-        (localPos == (int3)(7,7,3)) + (writePos > size-1).xyz;
-	
-    // Synchronize the threads in the group
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    if(comp.x+comp.y+comp.z ==  0) {
         // Load data from shared memory and do calculations
         float2 init_vector = read_imagef(init_vector_field, sampler, pos).xy;
 
         float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
-        fx1.xy = sharedMemory[LA3D(localPos.x+1,localPos.y,localPos.z)];
-        fx1.z = sharedMemorySingle[LA3D(localPos.x+1,localPos.y,localPos.z)];
-        fx_1.xy = sharedMemory[LA3D(localPos.x-1,localPos.y,localPos.z)];
-        fx_1.z = sharedMemorySingle[LA3D(localPos.x-1,localPos.y,localPos.z)];
-        fy1.xy = sharedMemory[LA3D(localPos.x,localPos.y+1,localPos.z)];
-        fy1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y+1,localPos.z)];
-        fy_1.xy = sharedMemory[LA3D(localPos.x,localPos.y-1,localPos.z)];
-        fy_1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y-1,localPos.z)];
-        fz1.xy = sharedMemory[LA3D(localPos.x,localPos.y,localPos.z+1)];
-        fz1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z+1)];
-        fz_1.xy = sharedMemory[LA3D(localPos.x,localPos.y,localPos.z-1)];
-        fz_1.z = sharedMemorySingle[LA3D(localPos.x,localPos.y,localPos.z-1)];
+        fx1 = read_imagef(read_vector_field, sampler, pos + (int4)(1,0,0,0)).xyz; 
+        fx_1 = read_imagef(read_vector_field, sampler, pos - (int4)(1,0,0,0)).xyz; 
+        fy1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,1,0,0)).xyz; 
+        fy_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,1,0,0)).xyz; 
+        fz1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,0,1,0)).xyz; 
+        fz_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,0,1,0)).xyz; 
 
         // Update the vector field: Calculate Laplacian using a 3D central difference scheme
         float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
@@ -95,7 +73,7 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
             (init_vector.x*init_vector.x+init_vector.y*init_vector.y+v.w*v.w);
 
         write_imagef(write_vector_field, writePos, v);
-    }
+   
 }
 
 __kernel void GVF3DResult(__write_only image3d_t result, __read_only image3d_t vectorField) {

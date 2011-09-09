@@ -243,7 +243,7 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     Image2D volume = Image2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, 0, voxels);
     delete[] voxels;
 
-    ImageFormat storageFormat = ImageFormat(CL_RG, CL_FLOAT);
+    ImageFormat storageFormat = ImageFormat(CL_RG, CL_SNORM_INT16);
     Image2D initVectorField = Image2D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y);
 
     // Run initialization kernel
@@ -399,12 +399,6 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
     int rangeX = SIZE_X;
     int rangeY = SIZE_Y;
     int rangeZ = SIZE_Z;
-    while(rangeX % 6 != 0)
-        rangeX++;
-    while(rangeY % 6 != 0)
-        rangeY++;
-    while(rangeZ % 2 != 0)
-        rangeZ++;
 
     Event event,startEvent;
     for(int i = 0; i < ITERATIONS; i++) {
@@ -420,7 +414,7 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+                    NDRange(rangeX,rangeY,rangeZ),
                     NDRange(8,8,4),
                     NULL,
                     &startEvent
@@ -430,7 +424,7 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+                    NDRange(rangeX,rangeY,rangeZ),
                     NDRange(8,8,4),
                     NULL,
                     &event
@@ -439,7 +433,7 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
+                    NDRange(rangeX,rangeY,rangeZ),
                     NDRange(8,8,4)
             );
         }
