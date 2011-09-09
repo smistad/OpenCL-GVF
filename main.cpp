@@ -243,7 +243,7 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     Image2D volume = Image2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, 0, voxels);
     delete[] voxels;
 
-    ImageFormat storageFormat = ImageFormat(CL_RG, CL_SNORM_INT16);
+    ImageFormat storageFormat = ImageFormat(CL_RG, CL_FLOAT);
     Image2D initVectorField = Image2D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y);
 
     // Run initialization kernel
@@ -277,11 +277,6 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     // Find a SIZE_X and SIZE_Y that is divisable by 14
     int rangeX = SIZE_X;
     int rangeY = SIZE_Y;
-    while(rangeX % 14 != 0)
-        rangeX++;
-
-    while(rangeY % 14 != 0)
-        rangeY++;
 
     Event startEvent;
     Event event;
@@ -299,7 +294,7 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(16*rangeX/14, 16*rangeY/14),
+                    NDRange(rangeX, rangeY),
                     NDRange(16,16),
                     NULL,
                     &startEvent
@@ -309,7 +304,7 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(16*rangeX/14, 16*rangeY/14),
+                    NDRange(rangeX, rangeY),
                     NDRange(16,16),
                     NULL,
                     &event
@@ -318,7 +313,7 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(16*rangeX/14, 16*rangeY/14),
+                    NDRange(rangeX, rangeY),
                     NDRange(16,16)
             );
         }

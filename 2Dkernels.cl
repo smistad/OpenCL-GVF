@@ -23,7 +23,7 @@ __kernel void GVF2DInit(__read_only image2d_t volume, __write_only image2d_t vec
 __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__read_only image2d_t init_vector_field, __read_only image2d_t read_vector_field, __write_only image2d_t write_vector_field, __private float mu) {
 
     int2 writePos = {
-        get_global_id(0)
+        get_global_id(0),
         get_global_id(1)
     };
     // Enforce mirror boundary conditions
