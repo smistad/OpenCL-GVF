@@ -20,44 +20,28 @@ __kernel void GVF2DInit(__read_only image2d_t volume, __write_only image2d_t vec
     write_imagef(vector_field, pos, gradient); 
 }
 
-#define LA2D(x,y) (x + (y<<4))
 __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__read_only image2d_t init_vector_field, __read_only image2d_t read_vector_field, __write_only image2d_t write_vector_field, __private float mu) {
 
     int2 writePos = {
-        get_global_id(0)-(get_group_id(0)*2+1), 
-        get_global_id(1)-(get_group_id(1)*2+1) 
+        get_global_id(0)
+        get_global_id(1)
     };
-    int2 localPos = {get_local_id(0), get_local_id(1)};
-    
-    // TODO: Enforce mirror boundary conditions
+    // Enforce mirror boundary conditions
     int2 size = {get_image_width(init_vector_field), get_image_height(init_vector_field)};
     int2 pos = writePos;
     pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
     pos = select(pos, size-3, pos >= size-1);
 
-    // Allocate shared memory
-    __local float2 sharedMemory[256];
-
-    // Read into shared memory
     float2 v = read_imagef(read_vector_field, sampler, pos).xy;
-    sharedMemory[LA2D(localPos.x,localPos.y)]= v;
 
-    // Ensure that it don't write outside of the image
-    int2 comp = (localPos == (int2)(0,0)) +
-        (localPos == (int2)(15,15)) + (writePos > size-1);
-	
-    // Synchronize the threads in the group
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    if(comp.x+comp.y ==  0) {
         // Load data from shared memory and do calculations
         float2 init_vector = read_imagef(init_vector_field, sampler, pos).xy;
 
         float2 fx1, fx_1, fy1, fy_1;
-        fx1 = sharedMemory[LA2D(localPos.x+1,localPos.y)];
-        fy1 = sharedMemory[LA2D(localPos.x,localPos.y+1)];
-        fx_1 = sharedMemory[LA2D(localPos.x-1,localPos.y)];
-        fy_1 = sharedMemory[LA2D(localPos.x,localPos.y-1)];
+        fx1 = read_imagef(read_vector_field, sampler, pos + (int2)(1,0)).xy;
+        fy1 = read_imagef(read_vector_field, sampler, pos + (int2)(0,1)).xy;
+        fx_1 = read_imagef(read_vector_field, sampler, pos - (int2)(1,0)).xy;
+        fy_1 = read_imagef(read_vector_field, sampler, pos - (int2)(0,1)).xy;
 
         // Update the vector field: Calculate Laplacian using a 3D central difference scheme
         float2 laplacian = -4*v + fx1 + fx_1 + fy1 + fy_1;
@@ -65,7 +49,6 @@ __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__re
         v += mu * laplacian - (v - init_vector)*(init_vector.x*init_vector.x+init_vector.y*init_vector.y);
 
         write_imagef(write_vector_field, writePos, (float4)(v.x,v.y,0,0));
-    }
 }
 
 __kernel void GVF2DResult(__write_only image2d_t result, __read_only image2d_t vectorField) {
