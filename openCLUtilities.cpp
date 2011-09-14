@@ -1,28 +1,66 @@
 #include "openCLUtilities.hpp"
 
-#if defined __APPLE__ || defined(MACOSX)
-#else
-    #if defined WIN32
-    #else
-        #include <GL/glx.h>
-    #endif
-#endif
-
-cl::Context createCLContext(cl_device_type type, bool GLInterop, cl_vendor vendor) {
+cl::Context createCLContext(cl_device_type type, cl_vendor vendor, bool GLInterop) {
     // Get available platforms
     cl::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
 
     // TODO: create vendor selecting mechanism
 
+
     if(platforms.size() == 0)
         throw cl::Error(1, "No OpenCL platforms were found");
 
-    cl::Platform platform = platforms[0];
+
+    int platformID = -1;
+    if(vendor != VENDOR_ALL) {
+        std::string find;
+        switch(vendor) {
+            case VENDOR_NVIDIA:
+                find = "NVIDIA";
+            break;
+            case VENDOR_AMD:
+                find = "Advanced Micro Devices";
+            break;
+            case VENDOR_INTEL:
+                find = "Intel";
+            break;
+        }
+        for(int i = 0; i < platforms.size(); i++) {
+            if(platforms[i].getInfo<CL_PLATFORM_VENDOR>().find(find) != std::string::npos) {
+                try {
+                    cl::vector<cl::Device> devices;
+                    platforms[i].getDevices(type, &devices);
+                    platformID = i;
+                    break;
+                } catch(cl::Error e) {
+                   continue; 
+                }
+            }
+        }
+    } else {
+        for(int i = 0; i < platforms.size(); i++) {
+            try {
+                cl::vector<cl::Device> devices;
+                platforms[i].getDevices(type, &devices);
+                platformID = i;
+                break;
+            } catch(cl::Error e) {
+               continue; 
+            }
+        }
+    }
+
+    if(platformID == -1) 
+        throw cl::Error(1, "No compatible OpenCL platform found");
+
+    cl::Platform platform = platforms[platformID];
+    std::cout << "Using platform vendor: " << platform.getInfo<CL_PLATFORM_VENDOR>() << std::endl;
 
     // Use the preferred platform and create a context
     cl_context_properties * cps;
     if(GLInterop) {
+        #ifdef GL_SHARING_EXTENSION
         #ifdef __APPLE || defined(MACOSX)
         cps = new cl_context_properties[5];
         //TODO: Apple OpenGL interop
@@ -39,10 +77,11 @@ cl::Context createCLContext(cl_device_type type, bool GLInterop, cl_vendor vendo
         cps[2] = CL_GLX_DISPLAY_KHR;
         cps[3] = (cl_context_properties)glXGetCurrentDisplay();
         #endif
-        #endif // end if apple
         cps[4] = CL_CONTEXT_PLATFORM;
         cps[5] = (cl_context_properties)(platform)();
         cps[6] = 0;
+        #endif // end if apple
+        #endif // end if gl interop
     } else {
         cps = new cl_context_properties[3];
         cps[0] = CL_CONTEXT_PLATFORM;
