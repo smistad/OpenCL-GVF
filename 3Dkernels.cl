@@ -43,37 +43,25 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
     // Read into shared memory
     float4 v = read_imagef(read_vector_field, sampler, pos);
 
-    /*
-    int x = localPos.x;
-    int y = localPos.y;
-    int z = localPos.z;
-    int w = 0;
-    int rowID2 = (LA(x,y,z) >> 4) & 0x1F;
-    int bankID2 = ((LA(x,y,z)) & 0xF) << 1;
-    int rowID = (LA(x,y,z) >> 5) & 0x1F;
-	int bankID = ((LA(x,y,z)) & 0x1F);
-    printf("Float2s: %d %d %d - %d - %d\n", x,y,z, bankID2, rowID2);
-	printf("Floats: %d %d %d - %d - %d\n", x,y,z, bankID, rowID);
-    */
-        // Load data from shared memory and do calculations
-        float2 init_vector = read_imagef(init_vector_field, sampler, pos).xy;
+    // Load data from shared memory and do calculations
+    float2 init_vector = read_imagef(init_vector_field, sampler, pos).xy;
 
-        float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
-        fx1 = read_imagef(read_vector_field, sampler, pos + (int4)(1,0,0,0)).xyz; 
-        fx_1 = read_imagef(read_vector_field, sampler, pos - (int4)(1,0,0,0)).xyz; 
-        fy1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,1,0,0)).xyz; 
-        fy_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,1,0,0)).xyz; 
-        fz1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,0,1,0)).xyz; 
-        fz_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,0,1,0)).xyz; 
+    float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
+    fx1 = read_imagef(read_vector_field, sampler, pos + (int4)(1,0,0,0)).xyz; 
+    fx_1 = read_imagef(read_vector_field, sampler, pos - (int4)(1,0,0,0)).xyz; 
+    fy1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,1,0,0)).xyz; 
+    fy_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,1,0,0)).xyz; 
+    fz1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,0,1,0)).xyz; 
+    fz_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,0,1,0)).xyz; 
 
-        // Update the vector field: Calculate Laplacian using a 3D central difference scheme
-        float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
+    // Update the vector field: Calculate Laplacian using a 3D central difference scheme
+    float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
 
-        v.xyz += mu * laplacian - (v.xyz - (float3)(init_vector.x, init_vector.y, v.w))*
-            (init_vector.x*init_vector.x+init_vector.y*init_vector.y+v.w*v.w);
+    v.xyz += mu * laplacian - (v.xyz - (float3)(init_vector.x, init_vector.y, v.w))*
+        (init_vector.x*init_vector.x+init_vector.y*init_vector.y+v.w*v.w);
 
-        write_imagef(write_vector_field, writePos, v);
-   
+    write_imagef(write_vector_field, writePos, v);
+
 }
 
 __kernel void GVF3DResult(__write_only image3d_t result, __read_only image3d_t vectorField) {
