@@ -9,15 +9,24 @@
 #include <iostream>
 #include <fstream>
 
+#ifdef GL_SHARING_EXTENSION
+    #if defined __APPLE__ || defined(MACOSX)
+    #else
+        #if defined WIN32
+        #else
+            #include <GL/glx.h>
+        #endif
+    #endif
+#endif
 
 enum cl_vendor {
-    ALL,
-    NVIDIA,
-    AMD,
-    INTEL
+    VENDOR_ALL,
+    VENDOR_NVIDIA,
+    VENDOR_AMD,
+    VENDOR_INTEL
 };
 
-cl::Context createCLContext(cl_device_type type, bool GLInterop = false, cl_vendor vendor = ALL);
+cl::Context createCLContext(cl_device_type type, cl_vendor vendor = VENDOR_ALL, bool GLInterop = false);
 
 cl::Program buildProgramFromSource(cl::Context context, std::string filename);
 
