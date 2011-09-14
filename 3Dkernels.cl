@@ -25,8 +25,7 @@ __kernel void GVF3DInit(__read_only image3d_t volume, __write_only image3d_t ini
     write_imagef(vector_field, pos, gradient); 
 }
 
-#define LA3D(x,y,z) (x + (y<<3) + (z<<6))
-__kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read_only image3d_t init_vector_field, __read_only image3d_t read_vector_field, __write_only image3d_t write_vector_field, __private float mu) {
+__kernel __attribute__((reqd_work_group_size(4,4,4))) void GVF3DIteration(__read_only image3d_t init_vector_field, __read_only image3d_t read_vector_field, __write_only image3d_t write_vector_field, __private float mu) {
 
     int4 writePos = {
         get_global_id(0),
@@ -39,21 +38,18 @@ __kernel __attribute__((reqd_work_group_size(8,8,4))) void GVF3DIteration(__read
     int4 pos = writePos;
     pos = select(pos, (int4)(2,2,2,0), pos == (int4)(0,0,0,0));
     pos = select(pos, size-3, pos >= size-1);
-   
-    // Read into shared memory
-    float4 v = read_imagef(read_vector_field, sampler, pos);
 
     // Load data from shared memory and do calculations
     float2 init_vector = read_imagef(init_vector_field, sampler, pos).xy;
 
-    float3 fx1, fx_1, fy1, fy_1, fz1, fz_1;
-    fx1 = read_imagef(read_vector_field, sampler, pos + (int4)(1,0,0,0)).xyz; 
-    fx_1 = read_imagef(read_vector_field, sampler, pos - (int4)(1,0,0,0)).xyz; 
-    fy1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,1,0,0)).xyz; 
-    fy_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,1,0,0)).xyz; 
-    fz1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,0,1,0)).xyz; 
-    fz_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,0,1,0)).xyz; 
-
+    float4 v = read_imagef(read_vector_field, sampler, pos);
+    float3 fx1 = read_imagef(read_vector_field, sampler, pos + (int4)(1,0,0,0)).xyz; 
+    float3 fx_1 = read_imagef(read_vector_field, sampler, pos - (int4)(1,0,0,0)).xyz; 
+    float3 fy1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,1,0,0)).xyz; 
+    float3 fy_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,1,0,0)).xyz; 
+    float3 fz1 = read_imagef(read_vector_field, sampler, pos + (int4)(0,0,1,0)).xyz; 
+    float3 fz_1 = read_imagef(read_vector_field, sampler, pos - (int4)(0,0,1,0)).xyz; 
+    
     // Update the vector field: Calculate Laplacian using a 3D central difference scheme
     float3 laplacian = -6*v.xyz + fx1 + fx_1 + fy1 + fy_1 + fz1 + fz_1;
 
@@ -69,7 +65,5 @@ __kernel void GVF3DResult(__write_only image3d_t result, __read_only image3d_t v
     int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
     float4 vector = read_imagef(vectorField, sampler, pos);
     vector.w = 0;
-    //if(1 < length(vector))
-    //    printf("%f %f %f\n", vector.x, vector.y, vector.z);
     write_imagef(result, pos, length(vector));
 }

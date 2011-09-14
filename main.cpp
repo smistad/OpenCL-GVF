@@ -415,7 +415,7 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
                     iterationKernel,
                     NullRange,
                     NDRange(rangeX,rangeY,rangeZ),
-                    NDRange(8,8,4),
+                    NDRange(4,4,4),
                     NULL,
                     &startEvent
             );
@@ -425,7 +425,7 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
                     iterationKernel,
                     NullRange,
                     NDRange(rangeX,rangeY,rangeZ),
-                    NDRange(8,8,4),
+                    NDRange(4,4,4),
                     NULL,
                     &event
             );
@@ -434,7 +434,7 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
                     iterationKernel,
                     NullRange,
                     NDRange(rangeX,rangeY,rangeZ),
-                    NDRange(8,8,4)
+                    NDRange(4,4,4)
             );
         }
     }
