@@ -231,6 +231,14 @@ float relativeAngleError(float * voxelsFloat, float * voxels, int size, int chan
 }
 
 float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, float mu, int ITERATIONS, int datatype) {
+    ImageFormat storageFormat;
+    if(datatype == sizeof(short)) {
+        std::cout << "Using 16 bit floats" << std::endl;
+        storageFormat = ImageFormat(CL_RG, CL_SNORM_INT16);
+    } else {
+        std::cout << "Using 32 bit floats" << std::endl;
+        storageFormat = ImageFormat(CL_RG, CL_FLOAT);
+    }
 
     Program program = buildProgramFromSource(context, "2Dkernels.cl");
 
@@ -243,7 +251,6 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     Image2D volume = Image2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, 0, voxels);
     delete[] voxels;
 
-    ImageFormat storageFormat = ImageFormat(CL_RG, CL_SNORM_INT16);
     Image2D initVectorField = Image2D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y);
 
     // Run initialization kernel
@@ -347,7 +354,17 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
 }
 
 float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
-    ImageFormat storageFormat = ImageFormat(CL_RGBA, CL_SNORM_INT16);
+    ImageFormat storageFormat;
+    ImageFormat storageFormat2;
+    if(datatype == sizeof(short)) {
+        std::cout << "Using 16 bit floats" << std::endl;
+        storageFormat = ImageFormat(CL_RGBA, CL_SNORM_INT16);
+        storageFormat2 = ImageFormat(CL_RG, CL_SNORM_INT16);
+    } else {
+        std::cout << "Using 32 bit floats" << std::endl;
+        storageFormat = ImageFormat(CL_RGBA, CL_FLOAT);
+        storageFormat2 = ImageFormat(CL_RG, CL_FLOAT);
+    }
     Program program = buildProgramFromSource(context, "3Dkernels.cl");
 
     // Create Kernels
@@ -371,7 +388,7 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
 
 
     Image3D vectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
-    Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, ImageFormat(CL_RG, CL_SNORM_INT16), SIZE_X, SIZE_Y, SIZE_Z);
+    Image3D initVectorField = Image3D(context, CL_MEM_READ_WRITE, storageFormat2, SIZE_X, SIZE_Y, SIZE_Z);
     initKernel.setArg(0, volume);
     initKernel.setArg(1, initVectorField);
     initKernel.setArg(2, vectorField);
