@@ -1,19 +1,15 @@
 #include "openCLUtilities.hpp"
 
-cl::Context createCLContext(cl_device_type type, cl_vendor vendor, bool GLInterop) {
+cl::Platform getPlatform(cl_device_type type, cl_vendor vendor) {
     // Get available platforms
     cl::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
 
-    // TODO: create vendor selecting mechanism
-
-
     if(platforms.size() == 0)
         throw cl::Error(1, "No OpenCL platforms were found");
 
-
     int platformID = -1;
-    if(vendor != VENDOR_ALL) {
+    if(vendor != VENDOR_ANY) {
         std::string find;
         switch(vendor) {
             case VENDOR_NVIDIA:
@@ -25,8 +21,11 @@ cl::Context createCLContext(cl_device_type type, cl_vendor vendor, bool GLIntero
             case VENDOR_INTEL:
                 find = "Intel";
             break;
+            default:
+                throw cl::Error(1, "Invalid vendor specified");
+            break;
         }
-        for(int i = 0; i < platforms.size(); i++) {
+        for(unsigned int i = 0; i < platforms.size(); i++) {
             if(platforms[i].getInfo<CL_PLATFORM_VENDOR>().find(find) != std::string::npos) {
                 try {
                     cl::vector<cl::Device> devices;
@@ -39,7 +38,7 @@ cl::Context createCLContext(cl_device_type type, cl_vendor vendor, bool GLIntero
             }
         }
     } else {
-        for(int i = 0; i < platforms.size(); i++) {
+        for(unsigned int i = 0; i < platforms.size(); i++) {
             try {
                 cl::vector<cl::Device> devices;
                 platforms[i].getDevices(type, &devices);
@@ -56,38 +55,20 @@ cl::Context createCLContext(cl_device_type type, cl_vendor vendor, bool GLIntero
 
     cl::Platform platform = platforms[platformID];
     std::cout << "Using platform vendor: " << platform.getInfo<CL_PLATFORM_VENDOR>() << std::endl;
+    return platform;
+}
+
+cl::Context createCLContext(cl_device_type type, cl_vendor vendor) {
+
+    cl::Platform platform = getPlatform(type, vendor);
 
     // Use the preferred platform and create a context
-    cl_context_properties * cps;
-    if(GLInterop) {
-        #ifdef GL_SHARING_EXTENSION
-        #ifdef __APPLE || defined(MACOSX)
-        cps = new cl_context_properties[5];
-        //TODO: Apple OpenGL interop
-        #else
-        cps = new cl_context_properties[7];
-        #ifdef WIN32
-        cps[0] = CL_GL_CONTEXT_KHR; 
-        cps[1] = (cl_context_properties)wglGetCurrentContext();
-        cps[2] = CL_WGL_HDC_KHR;
-        cps[3] = (cl_context_properties)wglGetCurrentDC();
-        #else
-        cps[0] = CL_GL_CONTEXT_KHR; 
-        cps[1] = (cl_context_properties)glXGetCurrentContext();
-        cps[2] = CL_GLX_DISPLAY_KHR;
-        cps[3] = (cl_context_properties)glXGetCurrentDisplay();
-        #endif
-        cps[4] = CL_CONTEXT_PLATFORM;
-        cps[5] = (cl_context_properties)(platform)();
-        cps[6] = 0;
-        #endif // end if apple
-        #endif // end if gl interop
-    } else {
-        cps = new cl_context_properties[3];
-        cps[0] = CL_CONTEXT_PLATFORM;
-        cps[1] = (cl_context_properties)(platform)();
-        cps[2] = 0;
-    }
+    cl_context_properties cps[] = {
+        CL_CONTEXT_PLATFORM, 
+        (cl_context_properties)(platform)(),
+        0
+    };
+
     try {
         cl::Context context = cl::Context(type, cps);
 
