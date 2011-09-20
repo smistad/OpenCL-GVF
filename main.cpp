@@ -620,6 +620,7 @@ int main(int argc, char ** argv) {
 
     // Get a list of devices
     vector<Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+    std::cout << "Using device: " << devices[0].getInfo<CL_DEVICE_NAME>() << std::endl;
 
     // Create a command queue and use the first device
     CommandQueue queue = CommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE);
