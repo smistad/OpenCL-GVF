@@ -356,15 +356,13 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
 
-    // Create vector raw files
-    float * vector = new float[SIZE_X*SIZE_Y*2];
-    queue.enqueueReadImage(vectorField, CL_TRUE, offset, region, 0, 0, vector);
-    writeVectorField(vector, SIZE_X*SIZE_Y);
 
     // Read the result in some way (maybe write to a seperate raw file)
     volume = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y);
+    Image2D vectorFieldFinal = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_RG,CL_FLOAT), SIZE_X, SIZE_Y);
     resultKernel.setArg(0, volume);
     resultKernel.setArg(1, vectorField);
+    resultKernel.setArg(2, vectorFieldFinal);
     queue.enqueueNDRangeKernel(
             resultKernel,
             NullRange,
@@ -377,6 +375,12 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
     std::cout << "Writing vector field to PNG file..." << std::endl;
     writeImage(voxels, SIZE_X,SIZE_Y);
+
+    // Create vector raw files
+    float * vector = new float[SIZE_X*SIZE_Y*2];
+    queue.enqueueReadImage(vectorFieldFinal, CL_TRUE, offset, region, 0, 0, vector);
+    writeVectorField(vector, SIZE_X*SIZE_Y);
+    
     return voxels;
 }
 

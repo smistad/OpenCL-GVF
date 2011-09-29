@@ -51,10 +51,11 @@ __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__re
         write_imagef(write_vector_field, writePos, (float4)(v.x,v.y,0,0));
 }
 
-__kernel void GVF2DResult(__write_only image2d_t result, __read_only image2d_t vectorField) {
+__kernel void GVF2DResult(__write_only image2d_t result, __read_only image2d_t vectorField, __write_only image2d_t vectorFieldFinal) {
     int2 pos = {get_global_id(0), get_global_id(1)};
     float4 vector = read_imagef(vectorField, sampler, pos);
     vector.z = 0;
     vector.w = 0;
+    write_imagef(vectorFieldFinal, pos, vector);
     write_imagef(result, pos, length(vector));
 }
