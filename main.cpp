@@ -19,6 +19,9 @@
 using namespace cl;
 typedef unsigned char uchar;
 
+
+
+
 /**
  * Reads a RAW file and normalizes it
  */
@@ -230,6 +233,24 @@ float relativeAngleError(float * voxelsFloat, float * voxels, int size, int chan
     return error;
 }
 
+void writeVectorField(float * vector, int size) {
+    
+    float * x = new float[size];
+    float * y = new float[size];
+    for(int i = 0; i < size; i ++) {
+        x[i] = vector[i*2];
+        y[i] = vector[i*2+1];
+    }
+
+    FILE * fx = fopen("result_x.raw", "wb");
+    fwrite(x, sizeof(float), size, fx);
+    fclose(fx);
+
+    FILE * fy = fopen("result_y.raw", "wb");
+    fwrite(y, sizeof(float), size, fy);
+    fclose(fy);
+}
+
 float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, float mu, int ITERATIONS, int datatype) {
     ImageFormat storageFormat;
     if(datatype == sizeof(short)) {
@@ -333,6 +354,12 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     std::cout << "One iteration processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
     startEvent.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
     std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
+
+
+    // Create vector raw files
+    float * vector = new float[SIZE_X*SIZE_Y*2];
+    queue.enqueueReadImage(vectorField, CL_TRUE, offset, region, 0, 0, vector);
+    writeVectorField(vector, SIZE_X*SIZE_Y);
 
     // Read the result in some way (maybe write to a seperate raw file)
     volume = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y);
