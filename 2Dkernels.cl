@@ -3,7 +3,12 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 
 __kernel void GVF2DInit(__read_only image2d_t volume, __write_only image2d_t vector_field ) {
     // Calculate gradient using a 1D central difference for each dimension, with spacing 1
-    int2 pos = {get_global_id(0), get_global_id(1)};
+    int2 writePos = {get_global_id(0), get_global_id(1)};
+
+    int2 size = {get_global_size(0), get_global_size(1)};
+    int2 pos = writePos;
+    pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
+    pos = select(pos, size-3, pos >= size-1);
 
     float f10 = read_imagef(volume, sampler, pos + (int2)(1,0)).x;
     float f_10 = read_imagef(volume, sampler, pos - (int2)(1,0)).x;
@@ -17,7 +22,7 @@ __kernel void GVF2DInit(__read_only image2d_t volume, __write_only image2d_t vec
         0
     };
 
-    write_imagef(vector_field, pos, gradient); 
+    write_imagef(vector_field, writePos, gradient); 
 }
 
 __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__read_only image2d_t init_vector_field, __read_only image2d_t read_vector_field, __write_only image2d_t write_vector_field, __private float mu) {
