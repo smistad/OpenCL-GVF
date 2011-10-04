@@ -539,10 +539,12 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
     region[1] = SIZE_Y;
     region[2] = SIZE_Z;
     
-    Buffer initVectorField = Buffer(context, CL_MEM_READ_WRITE, 4*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
+    Buffer initVectorField = Buffer(context, CL_MEM_READ_WRITE, 4*sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z);
+    Buffer vectorField = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z);
 
     initKernel.setArg(0, volume);
     initKernel.setArg(1, initVectorField);
+    initKernel.setArg(2, vectorField);
 
     queue.enqueueNDRangeKernel(
             initKernel,
@@ -551,15 +553,13 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
             NullRange
     );
 
-    ImageFormat storageFormat = ImageFormat(CL_RGBA, CL_SNORM_INT16);
+    ImageFormat storageFormat = ImageFormat(CL_RGBA, CL_FLOAT);
     Image3D initVectorFieldImage = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
     queue.enqueueCopyBufferToImage(initVectorField, initVectorFieldImage, 0, offset, region);
 
     // Copy init vector field buffer to vectorField buffer and 3D image 
-    Buffer vectorField = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
-    Buffer vectorField2 = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
+    Buffer vectorField2 = Buffer(context, CL_MEM_READ_WRITE, 3*sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z);
 
-    queue.enqueueCopyBuffer(initVectorField, vectorField, 0, 0, 3*sizeof(short)*SIZE_X*SIZE_Y*SIZE_Z);
     queue.finish();
 
     std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
@@ -570,12 +570,6 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
     int rangeX = SIZE_X;
     int rangeY = SIZE_Y;
     int rangeZ = SIZE_Z;
-    while(rangeX % 6 != 0)
-        rangeX++;
-    while(rangeY % 6 != 0)
-        rangeY++;
-    while(rangeZ % 2 != 0)
-        rangeZ++;
 
     Event event, startEvent;
     for(int i = 0; i < ITERATIONS; i++) {
@@ -591,8 +585,8 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
-                    NDRange(8,8,4),
+                    NDRange(rangeX,rangeY,rangeZ),
+                    NDRange(4,4,4),
                     NULL,
                     &startEvent
             );
@@ -601,8 +595,8 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
-                    NDRange(8,8,4),
+                    NDRange(rangeX,rangeY,rangeZ),
+                    NDRange(4,4,4),
                     NULL,
                     &event
             );
@@ -610,8 +604,8 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
             queue.enqueueNDRangeKernel(
                     iterationKernel,
                     NullRange,
-                    NDRange(8*rangeX/6,8*rangeY/6,4*rangeZ/2),
-                    NDRange(8,8,4)
+                    NDRange(rangeX,rangeY,rangeZ),
+                    NDRange(4,4,4)
             );
         }
     }
