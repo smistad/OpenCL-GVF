@@ -23,30 +23,28 @@ __kernel void GVF2DInit(__read_only image2d_t volume, __write_only image2d_t vec
 
 __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__read_only image2d_t init_vector_field, __read_only image2d_t read_vector_field, __write_only image2d_t write_vector_field, __private float mu) {
 
-    int2 writePos = {get_global_id(0), get_global_id(1)};
+    int2 pos = {get_global_id(0), get_global_id(1)};
     // Enforce mirror boundary conditions
     //int2 size = {get_global_size(0), get_global_size(1)};
-    int2 pos = writePos;
     //pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
     //pos = select(pos, size-3, pos >= size-1);
 
     float2 v = read_imagef(read_vector_field, sampler, pos).xy;
 
-        // Load data from shared memory and do calculations
-        float2 init_vector = read_imagef(init_vector_field, sampler, pos).xy;
+    float2 init_vector = read_imagef(init_vector_field, sampler, pos).xy;
 
-        float2 fx1, fx_1, fy1, fy_1;
-        fx1 = read_imagef(read_vector_field, sampler, pos + (int2)(1,0)).xy;
-        fy1 = read_imagef(read_vector_field, sampler, pos + (int2)(0,1)).xy;
-        fx_1 = read_imagef(read_vector_field, sampler, pos - (int2)(1,0)).xy;
-        fy_1 = read_imagef(read_vector_field, sampler, pos - (int2)(0,1)).xy;
+    float2 fx1, fx_1, fy1, fy_1;
+    fx1 = read_imagef(read_vector_field, sampler, pos + (int2)(1,0)).xy;
+    fy1 = read_imagef(read_vector_field, sampler, pos + (int2)(0,1)).xy;
+    fx_1 = read_imagef(read_vector_field, sampler, pos - (int2)(1,0)).xy;
+    fy_1 = read_imagef(read_vector_field, sampler, pos - (int2)(0,1)).xy;
 
-        // Update the vector field: Calculate Laplacian using a 3D central difference scheme
-        float2 laplacian = -4*v + fx1 + fx_1 + fy1 + fy_1;
+    // Update the vector field: Calculate Laplacian using a 3D central difference scheme
+    float2 laplacian = -4*v + fx1 + fx_1 + fy1 + fy_1;
 
-        v += mu * laplacian - (v - init_vector)*(init_vector.x*init_vector.x+init_vector.y*init_vector.y);
+    v += mu * laplacian - (v - init_vector)*(init_vector.x*init_vector.x+init_vector.y*init_vector.y);
 
-        write_imagef(write_vector_field, writePos, (float4)(v.x,v.y,0,0));
+    write_imagef(write_vector_field, pos, (float4)(v.x,v.y,0,0));
 }
 
 __kernel void GVF2DResult(__write_only image2d_t result, __read_only image2d_t vectorField, __write_only image2d_t vectorFieldFinal) {
