@@ -25,10 +25,10 @@ __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__re
 
     int2 writePos = {get_global_id(0), get_global_id(1)};
     // Enforce mirror boundary conditions
-    int2 size = {get_global_size(0), get_global_size(1)};
+    //int2 size = {get_global_size(0), get_global_size(1)};
     int2 pos = writePos;
-    pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
-    pos = select(pos, size-3, pos >= size-1);
+    //pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
+    //pos = select(pos, size-3, pos >= size-1);
 
     float2 v = read_imagef(read_vector_field, sampler, pos).xy;
 
