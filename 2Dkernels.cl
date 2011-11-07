@@ -1,5 +1,5 @@
 
-__constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
+__constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
 
 __kernel void GVF2DInit(__read_only image2d_t volume, __write_only image2d_t vector_field ) {
     // Calculate gradient using a 1D central difference for each dimension, with spacing 1
@@ -7,8 +7,8 @@ __kernel void GVF2DInit(__read_only image2d_t volume, __write_only image2d_t vec
 
     int2 size = {get_global_size(0), get_global_size(1)};
     int2 pos = writePos;
-    pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
-    pos = select(pos, size-3, pos >= size-1);
+    //pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
+    //pos = select(pos, size-3, pos >= size-1);
 
     float f10 = read_imagef(volume, sampler, pos + (int2)(1,0)).x;
     float f_10 = read_imagef(volume, sampler, pos - (int2)(1,0)).x;
@@ -37,8 +37,8 @@ __kernel __attribute__((reqd_work_group_size(16,16,1))) void GVF2DIteration(__re
     // TODO: Enforce mirror boundary conditions
     int2 size = {get_image_width(init_vector_field), get_image_height(init_vector_field)};
     int2 pos = writePos;
-    pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
-    pos = select(pos, size-3, pos >= size-1);
+    //pos = select(pos, (int2)(2,2), pos == (int2)(0,0));
+    //pos = select(pos, size-3, pos >= size-1);
 
     // Allocate shared memory
     __local float2 sharedMemory[256];
