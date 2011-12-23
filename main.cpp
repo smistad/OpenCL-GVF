@@ -703,7 +703,11 @@ int main(int argc, char ** argv) {
         float * pixels = parseImageFile(filename, SIZE_X, SIZE_Y);
         run2DKernels(context, queue, pixels, SIZE_X, SIZE_Y, mu, ITERATIONS, bytes);
     } else {
-        std::cout << "usage: filename of raw file size_x size_y size_z mu iterations bytes" << std::endl;
+        std::cout << "Usage:" << std::endl << "---------------------------------" << std::endl <<
+            "For 2D images:" << std::endl << 
+            "./host filename.jpg size_x size_y mu #iterations [-16bit] [--device cpu/gpu]" << std::endl <<
+            "For 3D images:" << std::endl <<
+            "./host filename.raw size_x size_y size_z mu #iterations [-16bit] [--device cpu/gpu]" << std::endl;
         exit(-1);
     }
         
