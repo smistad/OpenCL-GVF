@@ -647,7 +647,7 @@ int main(int argc, char ** argv) {
     CommandQueue queue;
 
    try { 
-    Context context = createCLContext(CL_DEVICE_TYPE_GPU);
+    Context context = createCLContextFromArguments(argc, argv);
 
     // Get a list of devices
     vector<Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
@@ -662,6 +662,14 @@ int main(int argc, char ** argv) {
 
     std::cout << "Available memory on selected device " << (double)memorySize/(1024*1024) << " MB "<< std::endl;
 
+    int newArgc = argc;
+    for(int i = 0; i < argc; i++) {
+        printf("%c %c\n", argv[i][0], argv[i][1]);
+        if(argv[i][0] == '-' && argv[i][1] == '-') {
+            newArgc -= 2;
+        }
+    }
+    argc = newArgc;
 
     if(argc == 8) {
         filename = argv[1];

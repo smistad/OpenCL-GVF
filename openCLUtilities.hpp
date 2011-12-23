@@ -9,12 +9,6 @@
     #include <OpenCL/cl.hpp>
 #else
     #include <CL/cl.hpp>
-    #ifdef _WIN32
-    #else
-    #ifdef __gl_h
-        #include <GL/glx.h>
-    #endif
-#endif
 #endif
 
 
@@ -30,9 +24,11 @@ enum cl_vendor {
     VENDOR_INTEL
 };
 
-cl::Context createCLContext(cl_device_type type, cl_vendor vendor = VENDOR_ANY);
+cl::Context createCLContextFromArguments(int argc, char ** argv);
 
-cl::Platform getPlatform(cl_device_type, cl_vendor vendor = VENDOR_ANY); 
+cl::Context createCLContext(cl_device_type type = CL_DEVICE_TYPE_ALL, cl_vendor vendor = VENDOR_ANY);
+
+cl::Platform getPlatform(cl_device_type = CL_DEVICE_TYPE_ALL, cl_vendor vendor = VENDOR_ANY); 
 
 cl::Program buildProgramFromSource(cl::Context context, std::string filename);
 
