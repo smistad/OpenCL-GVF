@@ -664,21 +664,24 @@ int main(int argc, char ** argv) {
 
     int newArgc = argc;
     for(int i = 0; i < argc; i++) {
-        printf("%c %c\n", argv[i][0], argv[i][1]);
         if(argv[i][0] == '-' && argv[i][1] == '-') {
             newArgc -= 2;
         }
     }
     argc = newArgc;
+    int bytes = 4;
+    if(strcmp(argv[argc-1], "-16bit") == 0) {
+        bytes = 2;
+        argc--;
+    }
 
-    if(argc == 8) {
+    if(argc == 7) {
         filename = argv[1];
         SIZE_X = atoi(argv[2]);
         SIZE_Y = atoi(argv[3]);
         SIZE_Z = atoi(argv[4]);
         mu = atof(argv[5]);
         ITERATIONS = atoi(argv[6]);
-        bytes = atoi(argv[7]);
 
         std::cout << "Reading RAW file " << filename << std::endl;
         float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
@@ -689,13 +692,13 @@ int main(int argc, char ** argv) {
         } else {
             run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
         }
-    } else if(argc == 7) {
+    } else if(argc == 6) {
         filename = argv[1];
         SIZE_X = atoi(argv[2]);
         SIZE_Y = atoi(argv[3]);
         mu = atof(argv[4]);
         ITERATIONS = atoi(argv[5]);
-        bytes = atoi(argv[6]);
+
         std::cout << "Reading image file " << filename << std::endl;
         float * pixels = parseImageFile(filename, SIZE_X, SIZE_Y);
         run2DKernels(context, queue, pixels, SIZE_X, SIZE_Y, mu, ITERATIONS, bytes);
