@@ -3,7 +3,7 @@
 
 #include <time.h>
 #include <CL/cl.hpp>
-#include "openCLUtilities.hpp"
+#include "OpenCLUtilities/openCLUtilities.hpp"
 #include <string>
 #include <iostream>
 #include <utility>

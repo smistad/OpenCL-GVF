@@ -11,7 +11,7 @@ find_package(ITK REQUIRED)
 message("using ${ITK_USE_FILE}")
 include(${ITK_USE_FILE})
 
-add_executable(host main.cpp openCLUtilities.cpp)
+add_executable(host main.cpp OpenCLUtilities/openCLUtilities.cpp)
 
 target_link_libraries(host ${OPENCL_LIBRARIES} ${ITK_LIBRARIES} )
 
