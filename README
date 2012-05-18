@@ -1,7 +1,7 @@
 Dependencies
 ------------------------------
 - OpenCL
-- GTK+ 2
+- GTK+ 2 (see SIPL installation notes)
 
 Compile
 ------------------------------
