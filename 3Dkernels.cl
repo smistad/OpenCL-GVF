@@ -60,10 +60,8 @@ __kernel __attribute__((reqd_work_group_size(4,4,4))) void GVF3DIteration(__read
 
 }
 
-__kernel void GVF3DResult(__write_only image3d_t result, __read_only image3d_t vectorField) {
-
+__kernel void GVF3DResult(__read_only image3d_t vectorField, __write_only image3d_t vectorFieldFinal) {
     int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
     float4 vector = read_imagef(vectorField, sampler, pos);
-    vector.w = 0;
-    write_imagef(result, pos, length(vector));
+    write_imagef(vectorFieldFinal, pos, vector);
 }

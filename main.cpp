@@ -1,257 +1,14 @@
-#define __NO_STD_VECTOR // Use cl::vector instead of STL version
-#define __CL_ENABLE_EXCEPTIONS
-
 #include <time.h>
-#include <CL/cl.hpp>
 #include "OpenCLUtilities/openCLUtilities.hpp"
 #include <string>
 #include <iostream>
 #include <utility>
 #include <math.h>
 #include <limits.h>
-#include <itkImage.h>
-#include <itkRawImageIO.h>
-#include <itkImageFileReader.h>
-#include <itkImageRegionIterator.h>
-#include <itkImageFileWriter.h>
-#include <itkCastImageFilter.h>
-#include <itkRescaleIntensityImageFilter.h>
+#include "SIPL/Core.hpp"
 using namespace cl;
-typedef unsigned char uchar;
 
-
-
-
-/**
- * Reads a RAW file and normalizes it
- */
-float * parseRawFile(char * filename, int SIZE_X, int SIZE_Y, int SIZE_Z) {
-    itk::RawImageIO<uchar, 3>::Pointer io;
-    io = itk::RawImageIO<uchar, 3>::New();
-    io->SetFileName(filename);
-    io->SetDimensions(0,SIZE_X);
-    io->SetDimensions(1,SIZE_Y);
-    io->SetDimensions(2,SIZE_Z);
-    io->SetHeaderSize(0);
-
-    typedef itk::Image<uchar, 3> ImageType;
-    itk::ImageFileReader<ImageType>::Pointer reader;
-    reader = itk::ImageFileReader<ImageType>::New();
-    reader->SetFileName(filename);
-    reader->SetImageIO(io);
-    reader->Update();
-
-    // Find min and max
-    int min = INT_MAX;
-    int max = 0;
-    ImageType::Pointer im = reader->GetOutput();
-    itk::ImageRegionIterator<ImageType> it(im, im->GetRequestedRegion() );
-    for(it = it.Begin(); !it.IsAtEnd(); ++it) {
-        if(it.Get() > max)
-            max = it.Get();
-
-        if(it.Get() < min)
-            min = it.Get();
-
-    }
-
-    std::cout << "Min: " << min << " Max: " << max << std::endl;
-
-    // Normalize result
-    float * voxels = new float[SIZE_X*SIZE_Y*SIZE_Z];
-    it = it.Begin();
-    for(int i = 0; i < SIZE_X*SIZE_Y*SIZE_Z; i++) {
-        voxels[i] = (float)(it.Get() - min) / (max - min);
-        ++it;
-    }
-
-    return voxels;
-} 
-
-void writeToRaw(float * voxels, char * filename, int SIZE_X, int SIZE_Y, int SIZE_Z) {
-    FILE * file = fopen(filename, "wb");
-    fwrite(voxels, sizeof(float), SIZE_X*SIZE_Y*SIZE_Z, file);
-}
-
-
-/**
- * Read Image and normalize it
- */
-float * parseImageFile(char * filename, int SIZE_X, int SIZE_Y) {
-    typedef itk::Image<float, 2> ImageType;
-    itk::ImageFileReader<ImageType>::Pointer reader;
-    reader = itk::ImageFileReader<ImageType>::New();
-    reader->SetFileName(filename);
-    reader->Update();
-    //
-    // Find min and max
-    int min = INT_MAX;
-    int max = 0;
-    ImageType::Pointer im = reader->GetOutput();
-    itk::ImageRegionIterator<ImageType> it(im, im->GetRequestedRegion() );
-    for(it = it.Begin(); !it.IsAtEnd(); ++it) {
-        if(it.Get() > max)
-            max = it.Get();
-
-        if(it.Get() < min)
-            min = it.Get();
-
-    }
-
-    std::cout << "Min: " << min << " Max: " << max << std::endl;
-
-    // Normalize result
-    float * voxels = new float[SIZE_X*SIZE_Y];
-    it = it.Begin();
-    for(int i = 0; i < SIZE_X*SIZE_Y; i++) {
-        voxels[i] = (float)(it.Get() - min) / (max - min);
-        ++it;
-    }
-
-    return voxels;
-
-}
-
-void writeImage(float * pixels, int SIZE_X, int SIZE_Y) {
-
-    typedef itk::Image<float, 2> ImageType;
-    ImageType::Pointer image = ImageType::New();
-    ImageType::RegionType region;
-    ImageType::SizeType size;
-    size[0] = SIZE_X;
-    size[1] = SIZE_Y;
-    region.SetSize(size);
-    image->SetRegions(region);
-    image->Allocate();
-
-    itk::ImageRegionIterator<ImageType> it(image, image->GetRequestedRegion() );
-    int i = 0;
-    for(it = it.Begin(); !it.IsAtEnd(); ++it) {
-        it.Set(pixels[i]);
-        i++;
-    }
-
-    typedef itk::Image<uchar,2> ScalarImageType;
-    typedef itk::ImageFileWriter<ScalarImageType> WriterType;
-    WriterType::Pointer writer = WriterType::New();
-
-    ScalarImageType::Pointer scalarImage = ScalarImageType::New();
-    typedef itk::RescaleIntensityImageFilter< ImageType, ScalarImageType> CastFilterType;
-    CastFilterType::Pointer castFilter = CastFilterType::New();
-    castFilter->SetInput(image);
-    castFilter->SetOutputMaximum(255);
-    castFilter->SetOutputMinimum(0);
-    castFilter->Update();
-
-    writer->SetFileName("output.jpg");
-    writer->SetInput(castFilter->GetOutput());
-    writer->Update();
-}
-
-/**
- * Use VTK to display image
- */
-void displaySlice(float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, int slice) {
-    typedef itk::Image<float, 2> ImageType;
-    ImageType::Pointer image = ImageType::New();
-    ImageType::RegionType region;
-    ImageType::SizeType size;
-    size[0] = SIZE_X;
-    size[1] = SIZE_Y;
-    size[2] = SIZE_Z;
-    region.SetSize(size);
-    image->SetRegions(region);
-    image->Allocate();
-
-    itk::ImageRegionIterator<ImageType> it(image, image->GetRequestedRegion() );
-    int i = 0;
-    for(it = it.Begin(); !it.IsAtEnd(); ++it) {
-        it.Set(voxels[i + SIZE_X*SIZE_Y*slice]);
-        i++;
-    }
-
-    typedef itk::Image<uchar,2> ScalarImageType;
-    typedef itk::ImageFileWriter<ScalarImageType> WriterType;
-    WriterType::Pointer writer = WriterType::New();
-
-    ScalarImageType::Pointer scalarImage = ScalarImageType::New();
-    typedef itk::RescaleIntensityImageFilter< ImageType, ScalarImageType> CastFilterType;
-    CastFilterType::Pointer castFilter = CastFilterType::New();
-    castFilter->SetInput(image);
-    castFilter->SetOutputMaximum(255);
-    castFilter->SetOutputMinimum(0);
-    castFilter->Update();
-
-    writer->SetFileName("test.jpg");
-    writer->SetInput(castFilter->GetOutput());
-    writer->Update();
-
-    /*
-    typedef itk::ImageToVTKImageFilter<ScalarImageType> ConnectorType;
-    ConnectorType::Pointer connector = ConnectorType::New();
-    connector->SetInput(castFilter->GetOutput());
-    QuickView viewer;
-    viewer.AddImage(connector->GetOutput());
-    viewer.Visualize();
-    */
-}
-
-float relativeMagnitudeError(float * voxelsFloat, float * voxels, int size, int channels) {
-    float error;
-    if(channels == 2) {
-        for(int i = 0; i < size; i += 2) {
-            error += abs(sqrt(pow(voxelsFloat[i],2)+pow(voxelsFloat[i+1],2))
-                    - sqrt(pow(voxels[i],2)+pow(voxels[i+1],2)));
-        }
-    } else if(channels == 4) {
-        for(int i = 0; i < size; i += 4) {
-            error += abs(sqrt(pow(voxelsFloat[i],2)+pow(voxelsFloat[i+1],2)+pow(voxelsFloat[i+2],2))
-                    - sqrt(pow(voxels[i],2)+pow(voxels[i+1],2)+pow(voxels[i+2],2)));
-        }
-    }
-
-    return error;
-}
-
-float relativeAngleError(float * voxelsFloat, float * voxels, int size, int channels) {
-    float error;
-    if(channels == 2) {
-        for(int i = 0; i < size; i += 2) {
-            float mag = sqrt(pow(voxelsFloat[i],2)+pow(voxelsFloat[i+1],2))
-                *sqrt(pow(voxels[i],2)+pow(voxels[i+1],2));
-            float dotProd = voxelsFloat[i]*voxels[i]+voxelsFloat[i+1]*voxels[i+1];
-            error += acos(dotProd/mag);
-        }
-    } else if(channels == 4) {
-        for(int i = 0; i < size; i += 4) {
-            float mag = sqrt(pow(voxelsFloat[i],2)+pow(voxelsFloat[i+1],2)+pow(voxelsFloat[i+2],2))
-                    *sqrt(pow(voxels[i],2)+pow(voxels[i+1],2)+pow(voxels[i+2],2));
-            float dotProd = voxelsFloat[i]*voxels[i]+voxelsFloat[i+1]*voxels[i+1]+voxelsFloat[i+2]*voxels[i+2];
-            error += acos(dotProd/mag);
-        }
-    }
-    return error;
-}
-
-void writeVectorField(float * vector, int size) {
-    
-    float * x = new float[size];
-    float * y = new float[size];
-    for(int i = 0; i < size; i ++) {
-        x[i] = vector[i*2];
-        y[i] = vector[i*2+1];
-    }
-
-    FILE * fx = fopen("result_x.raw", "wb");
-    fwrite(x, sizeof(float), size, fx);
-    fclose(fx);
-
-    FILE * fy = fopen("result_y.raw", "wb");
-    fwrite(y, sizeof(float), size, fy);
-    fclose(fy);
-}
-
-float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, float mu, int ITERATIONS, int datatype) {
+SIPL::float2 * run2DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, float mu, int ITERATIONS, int datatype) {
     ImageFormat storageFormat;
     if(datatype == sizeof(short)) {
         std::cout << "Using 16 bit floats" << std::endl;
@@ -355,36 +112,29 @@ float * run2DKernels(Context context, CommandQueue queue, float * voxels, int SI
     startEvent.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
     std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
+    // Read result back to host
+    SIPL::float2 * vector2 = new SIPL::float2[SIZE_X*SIZE_Y];
+    if(datatype == sizeof(short)) {
+        Image2D vectorFieldFinal = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_RG,CL_FLOAT), SIZE_X, SIZE_Y);
+        resultKernel.setArg(0, vectorField);
+        resultKernel.setArg(1, vectorFieldFinal);
+        queue.enqueueNDRangeKernel(
+                resultKernel,
+                NullRange,
+                NDRange(SIZE_X, SIZE_Y),
+                NullRange
+        );
+        queue.finish();
 
-
-    // Read the result in some way (maybe write to a seperate raw file)
-    volume = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y);
-    Image2D vectorFieldFinal = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_RG,CL_FLOAT), SIZE_X, SIZE_Y);
-    resultKernel.setArg(0, volume);
-    resultKernel.setArg(1, vectorField);
-    resultKernel.setArg(2, vectorFieldFinal);
-    queue.enqueueNDRangeKernel(
-            resultKernel,
-            NullRange,
-            NDRange(SIZE_X, SIZE_Y),
-            NullRange
-    );
-    queue.finish();
-    voxels = new float[SIZE_X*SIZE_Y];
-    std::cout << "Reading vector field from device..." << std::endl;
-    queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
-    std::cout << "Writing vector field to PNG file..." << std::endl;
-    writeImage(voxels, SIZE_X,SIZE_Y);
-
-    // Create vector raw files
-    float * vector = new float[SIZE_X*SIZE_Y*2];
-    queue.enqueueReadImage(vectorFieldFinal, CL_TRUE, offset, region, 0, 0, vector);
-    writeVectorField(vector, SIZE_X*SIZE_Y);
+        queue.enqueueReadImage(vectorFieldFinal, CL_TRUE, offset, region, 0, 0, vector2);
+    } else {
+        queue.enqueueReadImage(vectorField, CL_TRUE, offset, region, 0, 0, vector2);
+    }
     
-    return voxels;
+    return vector2;
 }
 
-float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
+SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
     ImageFormat storageFormat;
     ImageFormat storageFormat2;
     if(datatype == sizeof(short)) {
@@ -496,27 +246,29 @@ float * run3DKernels(Context context, CommandQueue queue, float * voxels, int SI
     startEvent.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
     std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
-    // Read the result in some way (maybe write to a seperate raw file)
-    volume = Image3D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_R,CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
-    resultKernel.setArg(0, volume);
-    resultKernel.setArg(1, vectorField);
-    queue.enqueueNDRangeKernel(
-            resultKernel,
-            NullRange,
-            NDRange(SIZE_X, SIZE_Y, SIZE_Z),
-            NullRange
-    );
-    queue.finish();
-    voxels = new float[SIZE_X*SIZE_Y*SIZE_Z];
-    std::cout << "Reading vector field from device..." << std::endl;
-    queue.enqueueReadImage(volume, CL_TRUE, offset, region, 0, 0, voxels);
-    std::cout << "Writing vector field to RAW file..." << std::endl;
-    writeToRaw(voxels, "result.raw", SIZE_X, SIZE_Y, SIZE_Z);
-    displaySlice(voxels, SIZE_X,SIZE_Y,SIZE_Y,100);
-    return voxels;
+    // Read result back to host
+    SIPL::float3 * vector2 = new SIPL::float3[SIZE_X*SIZE_Y*SIZE_Z];
+    if(datatype == sizeof(short)) {
+        Image3D vectorFieldFinal = Image3D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_RGBA,CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
+        resultKernel.setArg(0, vectorField);
+        resultKernel.setArg(1, vectorFieldFinal);
+        queue.enqueueNDRangeKernel(
+                resultKernel,
+                NullRange,
+                NDRange(SIZE_X, SIZE_Y),
+                NullRange
+        );
+        queue.finish();
+
+        queue.enqueueReadImage(vectorFieldFinal, CL_TRUE, offset, region, 0, 0, vector2);
+    } else {
+        queue.enqueueReadImage(vectorField, CL_TRUE, offset, region, 0, 0, vector2);
+    }
+
+    return vector2;
 }
 
-float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
+SIPL::float3 * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
     
     Program program = buildProgramFromSource(context, "3DkernelsNO_WRITE_TEX.cl");
 
@@ -619,24 +371,9 @@ float * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * 
     startEvent.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
     std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
-    // Read the result in some way (maybe write to a seperate raw file)
-    Buffer result = Buffer(context, CL_MEM_WRITE_ONLY, sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z);
-    resultKernel.setArg(0, result);
-    resultKernel.setArg(1, vectorField);
-    queue.enqueueNDRangeKernel(
-            resultKernel,
-            NullRange,
-            NDRange(SIZE_X, SIZE_Y, SIZE_Z),
-            NullRange
-    );
-    queue.finish();
-    voxels = new float[SIZE_X*SIZE_Y*SIZE_Z];
-    std::cout << "Reading vector field from device..." << std::endl;
-    queue.enqueueReadBuffer(result, CL_TRUE, 0, sizeof(float)*SIZE_X*SIZE_Y*SIZE_Z, voxels);
-    std::cout << "Writing vector field to RAW file..." << std::endl;
-    writeToRaw(voxels, "result.raw", SIZE_X, SIZE_Y, SIZE_Z);
-    displaySlice(voxels, SIZE_X,SIZE_Y,SIZE_Y,100);
-    return voxels;
+    SIPL::float3 * vector = new SIPL::float3[SIZE_X*SIZE_Y*SIZE_Z];
+    queue.enqueueReadBuffer(vectorField, CL_TRUE, 0, sizeof(SIPL::float3)*SIZE_X*SIZE_Y*SIZE_Z, vector);
+    return vector;
 }
 
 int main(int argc, char ** argv) {
@@ -645,6 +382,7 @@ int main(int argc, char ** argv) {
     float mu;
     Context context;
     CommandQueue queue;
+    SIPL::Init();
 
    try { 
     Context context = createCLContextFromArguments(argc, argv);
@@ -684,30 +422,59 @@ int main(int argc, char ** argv) {
         ITERATIONS = atoi(argv[6]);
 
         std::cout << "Reading RAW file " << filename << std::endl;
-        float * voxels = parseRawFile(filename, SIZE_X, SIZE_Y, SIZE_Z);
+        SIPL::Volume<SIPL::uchar> * volume = new SIPL::Volume<SIPL::uchar>(filename, SIZE_X, SIZE_Y, SIZE_Z);
+        SIPL::Volume<float> * converted = new SIPL::Volume<float>(volume);
+        float * voxels = converted->getData(); 
+        SIPL::Volume<SIPL::float3> * GVF = new SIPL::Volume<SIPL::float3>(volume->getWidth(), volume->getHeight(), volume->getDepth());
+        SIPL::float3 * output;
 
-        float * output;
         if((int)devices[0].getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") > -1) {
-            run3DKernels(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
+            std::cout << "3D textures not supported on this device. Using global buffer memory with 32 bit floats instead" << std::endl;
+            output = run3DKernels(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
         } else {
-            run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
+            output = run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
         }
-    } else if(argc == 6) {
+        GVF->setData(output);
+        GVF->show(0, 0.25);
+    } else if(argc == 4) {
         filename = argv[1];
-        SIZE_X = atoi(argv[2]);
-        SIZE_Y = atoi(argv[3]);
-        mu = atof(argv[4]);
-        ITERATIONS = atoi(argv[5]);
+        mu = atof(argv[2]);
+        ITERATIONS = atoi(argv[3]);
+        std::string strFilename = filename;
+        if(strFilename.substr(strFilename.size()-3) == "mhd") {
+            // Is 3D image (mhd file)
+            SIPL::Volume<float> * volume = new SIPL::Volume<float>(filename);
+            SIZE_X = volume->getWidth();
+            SIZE_Y = volume->getHeight();
+            SIZE_Z = volume->getDepth();
+            float * voxels = volume->getData();
+            SIPL::Volume<SIPL::float3> * GVF = new SIPL::Volume<SIPL::float3>(volume->getWidth(), volume->getHeight(), volume->getDepth());
+            SIPL::float3 * output;
 
-        std::cout << "Reading image file " << filename << std::endl;
-        float * pixels = parseImageFile(filename, SIZE_X, SIZE_Y);
-        run2DKernels(context, queue, pixels, SIZE_X, SIZE_Y, mu, ITERATIONS, bytes);
+            if((int)devices[0].getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") > -1) {
+                output = run3DKernels(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
+            } else {
+                output = run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
+            }
+            GVF->setData(output);
+            GVF->show(0, 0.25);           
+        }else{
+            // Is 2D image
+            std::cout << "Reading image file " << filename << std::endl;
+            SIPL::Image<float> * image = new SIPL::Image<float>(filename);
+            float * pixels = image->getData();
+            SIPL::Image<SIPL::float2> * GVF = new SIPL::Image<SIPL::float2>(image->getWidth(), image->getHeight());
+            SIPL::float2 * output = run2DKernels(context, queue, pixels, image->getWidth(), image->getHeight(), mu, ITERATIONS, bytes);
+            GVF->setData(output);
+            GVF->show(0, 0.5);
+        }
     } else {
         std::cout << "Usage:" << std::endl << "---------------------------------" << std::endl <<
             "For 2D images:" << std::endl << 
-            "./host filename.jpg size_x size_y mu #iterations [-16bit] [--device cpu/gpu]" << std::endl <<
+            "./host filename.jpg mu #iterations [-16bit] [--device cpu/gpu]" << std::endl <<
             "For 3D images:" << std::endl <<
-            "./host filename.raw size_x size_y size_z mu #iterations [-16bit] [--device cpu/gpu]" << std::endl;
+            "./host filename.raw size_x size_y size_z mu #iterations [-16bit] [--device cpu/gpu] (uchar raw files only)" << std::endl << 
+            "./host filename.mhd mu #iterations [-16bit] [--device cpu/gpu] " << std::endl;
         exit(-1);
     }
         
