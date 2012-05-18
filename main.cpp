@@ -25,7 +25,7 @@ SIPL::float2 * run2DKernels(Context context, CommandQueue queue, float * voxels,
     Kernel iterationKernel = Kernel(program, "GVF2DIteration");
     Kernel resultKernel = Kernel(program, "GVF2DResult");
 
-    // Load volume to GPU
+    // Load volume to device
     Image2D volume = Image2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, ImageFormat(CL_R, CL_FLOAT), SIZE_X, SIZE_Y, 0, voxels);
     delete[] voxels;
 
@@ -181,13 +181,8 @@ SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels,
             NullRange
     );
 
-    // Delete volume from device
-    //volume.~Image3D();
-
     // copy vector field and create double buffer
     Image3D vectorField2 = Image3D(context, CL_MEM_READ_WRITE, storageFormat, SIZE_X, SIZE_Y, SIZE_Z);
-    //queue.enqueueCopyImage(initVectorField, vectorField, offset, offset, region);
-    //queue.finish();
 
     std::cout << "Running iterations... ( " << ITERATIONS << " )" << std::endl; 
     // Run iterations
