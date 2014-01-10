@@ -19,10 +19,10 @@ Usage
 =============================
 For 2D images:
 ------------------------------
-./host filename.jpg mu #iterations [-16bit] [--device cpu/gpu]
+./GVF filename.jpg mu #iterations [-16bit] [--device cpu/gpu]
 
 For 3D images:
 ------------------------------
-./host filename.mhd mu #iterations [-16bit] [--device cpu/gpu]
+./GVF filename.mhd mu #iterations [-16bit] [--device cpu/gpu]
 
 Note: The default implementation will use a 32-bit floating point storage format, but if -16bit is specified it will use a 16-bit storage format.
