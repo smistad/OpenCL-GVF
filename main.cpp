@@ -8,6 +8,10 @@
 #include "SIPL/Core.hpp"
 using namespace cl;
 
+#ifndef KERNELS_DIR
+#define KERNELS_DIR ""
+#endif
+
 SIPL::float2 * run2DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, float mu, int ITERATIONS, int datatype) {
     ImageFormat storageFormat;
     if(datatype == sizeof(short)) {
@@ -18,7 +22,8 @@ SIPL::float2 * run2DKernels(Context context, CommandQueue queue, float * voxels,
         storageFormat = ImageFormat(CL_RG, CL_FLOAT);
     }
 
-    Program program = buildProgramFromSource(context, "2Dkernels.cl");
+    std::string filaname = std::string(KERNELS_DIR) + std::string("2Dkernels.cl");
+    Program program = buildProgramFromSource(context, filaname);
 
     // Create kernels
     Kernel initKernel = Kernel(program, "GVF2DInit");
@@ -146,7 +151,8 @@ SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels,
         storageFormat = ImageFormat(CL_RGBA, CL_FLOAT);
         storageFormat2 = ImageFormat(CL_RG, CL_FLOAT);
     }
-    Program program = buildProgramFromSource(context, "3Dkernels.cl");
+    std::string filaname = std::string(KERNELS_DIR) + std::string("3Dkernels.cl");
+    Program program = buildProgramFromSource(context, filaname);
 
     // Create Kernels
     Kernel initKernel = Kernel(program, "GVF3DInit");
@@ -242,7 +248,7 @@ SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels,
     std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
     // Read result back to host
-    SIPL::float3 * vector2 = new SIPL::float3[SIZE_X*SIZE_Y*SIZE_Z];
+    float * vector2 = new float[SIZE_X*SIZE_Y*SIZE_Z*4];
     if(datatype == sizeof(short)) {
         Image3D vectorFieldFinal = Image3D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_RGBA,CL_FLOAT), SIZE_X, SIZE_Y, SIZE_Z);
         resultKernel.setArg(0, vectorField);
@@ -260,12 +266,21 @@ SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels,
         queue.enqueueReadImage(vectorField, CL_TRUE, offset, region, 0, 0, vector2);
     }
 
-    return vector2;
+    SIPL::float3 * vectorFieldResult = new SIPL::float3[SIZE_X*SIZE_Y*SIZE_Z];
+    for(int i = 0; i < SIZE_X*SIZE_Y*SIZE_Z; ++i) {
+        vectorFieldResult[i].x = vector2[i*4];
+        vectorFieldResult[i].y = vector2[i*4+1];
+        vectorFieldResult[i].z = vector2[i*4+2];
+    }
+    delete[] vector2;
+
+    return vectorFieldResult;
 }
 
 SIPL::float3 * run3DKernelsWithoutTexture(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
     
-    Program program = buildProgramFromSource(context, "3DkernelsNO_WRITE_TEX.cl");
+    std::string filaname = std::string(KERNELS_DIR) + std::string("3DkernelsNO_WRITE_TEX.cl");
+    Program program = buildProgramFromSource(context, filaname);
 
     // Create Kernels
     Kernel initKernel = Kernel(program, "GVF3DInit");
@@ -377,13 +392,12 @@ int main(int argc, char ** argv) {
     float mu;
     Context context;
     CommandQueue queue;
-    SIPL::Init();
 
    try { 
     Context context = createCLContextFromArguments(argc, argv);
 
     // Get a list of devices
-    vector<Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+    VECTOR_CLASS<Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
     std::cout << "Using device: " << devices[0].getInfo<CL_DEVICE_NAME>() << std::endl;
 
     // Create a command queue and use the first device
@@ -408,41 +422,18 @@ int main(int argc, char ** argv) {
         argc--;
     }
 
-    if(argc == 7) {
-        filename = argv[1];
-        SIZE_X = atoi(argv[2]);
-        SIZE_Y = atoi(argv[3]);
-        SIZE_Z = atoi(argv[4]);
-        mu = atof(argv[5]);
-        ITERATIONS = atoi(argv[6]);
-
-        std::cout << "Reading RAW file " << filename << std::endl;
-        SIPL::Volume<SIPL::uchar> * volume = new SIPL::Volume<SIPL::uchar>(filename, SIZE_X, SIZE_Y, SIZE_Z);
-        SIPL::Volume<float> * converted = new SIPL::Volume<float>(volume);
-        float * voxels = converted->getData(); 
-        SIPL::Volume<SIPL::float3> * GVF = new SIPL::Volume<SIPL::float3>(volume->getWidth(), volume->getHeight(), volume->getDepth());
-        SIPL::float3 * output;
-
-        if((int)devices[0].getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") > -1) {
-            std::cout << "3D textures not supported on this device. Using global buffer memory with 32 bit floats instead" << std::endl;
-            output = run3DKernels(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
-        } else {
-            output = run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
-        }
-        GVF->setData(output);
-        GVF->show(0, 0.25);
-    } else if(argc == 4) {
+    if(argc == 4) {
         filename = argv[1];
         mu = atof(argv[2]);
         ITERATIONS = atoi(argv[3]);
         std::string strFilename = filename;
         if(strFilename.substr(strFilename.size()-3) == "mhd") {
             // Is 3D image (mhd file)
-            SIPL::Volume<float> * volume = new SIPL::Volume<float>(filename);
+            SIPL::Volume<float> * volume = new SIPL::Volume<float>(filename, SIPL::IntensityTransformation(SIPL::NORMALIZED));
             SIZE_X = volume->getWidth();
             SIZE_Y = volume->getHeight();
             SIZE_Z = volume->getDepth();
-            float * voxels = volume->getData();
+            float * voxels = (float *)volume->getData();
             SIPL::Volume<SIPL::float3> * GVF = new SIPL::Volume<SIPL::float3>(volume->getWidth(), volume->getHeight(), volume->getDepth());
             SIPL::float3 * output;
 
@@ -452,23 +443,22 @@ int main(int argc, char ** argv) {
                 output = run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
             }
             GVF->setData(output);
-            GVF->show(0, 0.25);           
+            GVF->display(0, 0.25);
         }else{
             // Is 2D image
             std::cout << "Reading image file " << filename << std::endl;
             SIPL::Image<float> * image = new SIPL::Image<float>(filename);
-            float * pixels = image->getData();
+            float * pixels = (float *)image->getData();
             SIPL::Image<SIPL::float2> * GVF = new SIPL::Image<SIPL::float2>(image->getWidth(), image->getHeight());
             SIPL::float2 * output = run2DKernels(context, queue, pixels, image->getWidth(), image->getHeight(), mu, ITERATIONS, bytes);
             GVF->setData(output);
-            GVF->show(0, 0.5);
+            GVF->display(0, 0.5);
         }
     } else {
         std::cout << "Usage:" << std::endl << "---------------------------------" << std::endl <<
             "For 2D images:" << std::endl << 
             "./host filename.jpg mu #iterations [-16bit] [--device cpu/gpu]" << std::endl <<
             "For 3D images:" << std::endl <<
-            "./host filename.raw size_x size_y size_z mu #iterations [-16bit] [--device cpu/gpu] (uchar raw files only)" << std::endl << 
             "./host filename.mhd mu #iterations [-16bit] [--device cpu/gpu] " << std::endl;
         exit(-1);
     }
