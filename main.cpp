@@ -381,9 +381,16 @@ SIPL::float3 * run3DKernelsWithoutTexture(Context context, CommandQueue queue, f
     startEvent.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
     std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
-    SIPL::float3 * vector = new SIPL::float3[SIZE_X*SIZE_Y*SIZE_Z];
+    float * vector = new float[SIZE_X*SIZE_Y*SIZE_Z*4];
     queue.enqueueReadBuffer(vectorField, CL_TRUE, 0, sizeof(SIPL::float3)*SIZE_X*SIZE_Y*SIZE_Z, vector);
-    return vector;
+    SIPL::float3 * vectorFieldResult = new SIPL::float3[SIZE_X*SIZE_Y*SIZE_Z];
+    for(int i = 0; i < SIZE_X*SIZE_Y*SIZE_Z; ++i) {
+        vectorFieldResult[i].x = vector[i*4];
+        vectorFieldResult[i].y = vector[i*4+1];
+        vectorFieldResult[i].z = vector[i*4+2];
+    }
+    delete[] vector;
+    return vectorFieldResult;
 }
 
 int main(int argc, char ** argv) {
@@ -440,19 +447,21 @@ int main(int argc, char ** argv) {
             if((int)devices[0].getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") > -1) {
                 output = run3DKernels(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
             } else {
+                std::cout << "This device doesn't support writing to 3D textures. Using buffers instead. 16bit storage format is also disabled." << std::endl;
                 output = run3DKernelsWithoutTexture(context, queue, voxels, SIZE_X, SIZE_Y, SIZE_Z, mu, ITERATIONS, bytes);
             }
             GVF->setData(output);
-            GVF->display(0, 0.25);
+            GVF->display(0, 0.1);
         }else{
             // Is 2D image
             std::cout << "Reading image file " << filename << std::endl;
+            // TODO: need to normalized this image!! Current code will not work
             SIPL::Image<float> * image = new SIPL::Image<float>(filename);
             float * pixels = (float *)image->getData();
             SIPL::Image<SIPL::float2> * GVF = new SIPL::Image<SIPL::float2>(image->getWidth(), image->getHeight());
             SIPL::float2 * output = run2DKernels(context, queue, pixels, image->getWidth(), image->getHeight(), mu, ITERATIONS, bytes);
             GVF->setData(output);
-            GVF->display(0, 0.5);
+            GVF->display(0, 0.1);
         }
     } else {
         std::cout << "Usage:" << std::endl << "---------------------------------" << std::endl <<
