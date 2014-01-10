@@ -500,6 +500,12 @@ int main(int argc, char ** argv) {
             GVF->display(0, 0.1);
 
             std::cout << "Max residual (error) was: " << calculateMaxResidual(GVF, volume, mu) << std::endl;
+
+            // Create magnitude image and display it
+            SIPL::Volume<float> * magnitude = new SIPL::Volume<float>(GVF->getSize());
+            for(int i = 0; i < magnitude->getTotalSize(); i++)
+                magnitude->set(i, GVF->get(i).length());
+            magnitude->display();
         } else {
             // Is 2D image
             std::cout << "Reading image file " << filename << std::endl;
@@ -510,6 +516,12 @@ int main(int argc, char ** argv) {
             SIPL::float2 * output = run2DKernels(context, queue, pixels, image->getWidth(), image->getHeight(), mu, ITERATIONS, bytes);
             GVF->setData(output);
             GVF->display(0, 0.1);
+
+            // Create magnitude image and display it
+            SIPL::Image<float> * magnitude = new SIPL::Image<float>(GVF->getWidth(), GVF->getHeight());
+            for(int i = 0; i < magnitude->getTotalSize(); i++)
+                magnitude->set(i, GVF->get(i).length());
+            magnitude->display();
         }
     } else {
         std::cout << "Usage:" << std::endl << "---------------------------------" << std::endl <<
