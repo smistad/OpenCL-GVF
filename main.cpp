@@ -18,6 +18,7 @@ float calculateMaxResidual(
         float mu
     ) {
     float maxResidual = -1;
+    float totalResidual = 0.0f;
 
     // Calculate initial vector field first
     SIPL::Volume<SIPL::float3> * initialVectorField = new SIPL::Volume<SIPL::float3>(v->getSize());
@@ -46,6 +47,7 @@ float calculateMaxResidual(
                 + vectorField->get(pos-SIPL::int3(0,1,0))
                 + vectorField->get(pos-SIPL::int3(0,0,1));
         SIPL::float3 residual = mu * laplacian - (f.x*f.x+f.y*f.y+f.z*f.z)*(v2-f);
+        totalResidual += residual.length();//fabs(residual.x)+fabs(residual.y)+fabs(residual.z);
         if(fabs(residual.x) > maxResidual) {
             maxResidual = fabs(residual.x);
         }
@@ -57,6 +59,8 @@ float calculateMaxResidual(
         }
     }}}
 
+    int size = (v->getWidth()-2)*(v->getHeight()-2)*(v->getDepth()-2);
+    //return totalResidual/size;
     return maxResidual;
 }
 
@@ -303,7 +307,7 @@ SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels,
         queue.enqueueNDRangeKernel(
                 resultKernel,
                 NullRange,
-                NDRange(SIZE_X, SIZE_Y),
+                NDRange(SIZE_X, SIZE_Y, SIZE_Z),
                 NullRange
         );
         queue.finish();
