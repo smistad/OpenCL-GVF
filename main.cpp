@@ -431,13 +431,13 @@ SIPL::float3 * run3DKernelsWithoutTexture(Context context, CommandQueue queue, f
     startEvent.getProfilingInfo<cl_ulong>(CL_PROFILING_COMMAND_START, &start);
     std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
-    float * vector = new float[SIZE_X*SIZE_Y*SIZE_Z*4];
-    queue.enqueueReadBuffer(vectorField, CL_TRUE, 0, sizeof(SIPL::float3)*SIZE_X*SIZE_Y*SIZE_Z, vector);
+    float * vector = new float[SIZE_X*SIZE_Y*SIZE_Z*3];
+    queue.enqueueReadBuffer(vectorField, CL_TRUE, 0, sizeof(float)*3*SIZE_X*SIZE_Y*SIZE_Z, vector);
     SIPL::float3 * vectorFieldResult = new SIPL::float3[SIZE_X*SIZE_Y*SIZE_Z];
     for(int i = 0; i < SIZE_X*SIZE_Y*SIZE_Z; ++i) {
-        vectorFieldResult[i].x = vector[i*4];
-        vectorFieldResult[i].y = vector[i*4+1];
-        vectorFieldResult[i].z = vector[i*4+2];
+        vectorFieldResult[i].x = vector[i*3];
+        vectorFieldResult[i].y = vector[i*3+1];
+        vectorFieldResult[i].z = vector[i*3+2];
     }
     delete[] vector;
     return vectorFieldResult;
