@@ -170,7 +170,7 @@ SIPL::float2 * run2DKernels(Context context, CommandQueue queue, float * voxels,
     std::cout << "All iterations processed in: " << (end-start)* 1.0e-6 << " ms " << std::endl;
 
     // Read result back to host
-    SIPL::float2 * vector2 = new SIPL::float2[SIZE_X*SIZE_Y];
+    float* vector2 = new float[SIZE_X*SIZE_Y*2];
     if(datatype == sizeof(short)) {
         Image2D vectorFieldFinal = Image2D(context, CL_MEM_WRITE_ONLY, ImageFormat(CL_RG,CL_FLOAT), SIZE_X, SIZE_Y);
         resultKernel.setArg(0, vectorField);
@@ -187,8 +187,15 @@ SIPL::float2 * run2DKernels(Context context, CommandQueue queue, float * voxels,
     } else {
         queue.enqueueReadImage(vectorField, CL_TRUE, offset, region, 0, 0, vector2);
     }
+
+    SIPL::float2* result = new SIPL::float2[SIZE_X*SIZE_Y];
+    for(int i = 0; i < SIZE_X*SIZE_Y; i++) {
+        result[i].x = vector2[i*2];
+        result[i].y = vector2[i*2+1];
+    }
+    delete[] vector2;
     
-    return vector2;
+    return result;
 }
 
 SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels, int SIZE_X, int SIZE_Y, int SIZE_Z, float mu, int ITERATIONS, int datatype) {
@@ -513,18 +520,21 @@ int main(int argc, char ** argv) {
         } else {
             // Is 2D image
             std::cout << "Reading image file " << filename << std::endl;
-            // TODO: need to normalized this image!! Current code will not work
             SIPL::Image<float> * image = new SIPL::Image<float>(filename);
-            float * pixels = (float *)image->getData();
-            SIPL::Image<SIPL::float2> * GVF = new SIPL::Image<SIPL::float2>(image->getWidth(), image->getHeight());
+            image->display();
+            SIPL::IntensityTransformation transformation(SIPL::NORMALIZED);
+            float* pixels = new float[image->getTotalSize()];
+            transformation.transform(image->getData(), pixels, image->getTotalSize());
             SIPL::float2 * output = run2DKernels(context, queue, pixels, image->getWidth(), image->getHeight(), mu, ITERATIONS, bytes);
+            SIPL::Image<SIPL::float2> * GVF = new SIPL::Image<SIPL::float2>(image->getWidth(), image->getHeight());
             GVF->setData(output);
             GVF->display(0, 0.1);
 
             // Create magnitude image and display it
             SIPL::Image<float> * magnitude = new SIPL::Image<float>(GVF->getWidth(), GVF->getHeight());
-            for(int i = 0; i < magnitude->getTotalSize(); i++)
+            for(int i = 0; i < magnitude->getTotalSize(); i++) {
                 magnitude->set(i, GVF->get(i).length());
+            }
             magnitude->display();
         }
     } else {

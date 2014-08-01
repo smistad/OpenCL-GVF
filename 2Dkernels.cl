@@ -5,15 +5,14 @@ __kernel void GVF2DInit(__read_only image2d_t volume, __write_only image2d_t vec
     // Calculate gradient using a 1D central difference for each dimension, with spacing 1
     int2 pos = {get_global_id(0), get_global_id(1)};
 
-
     float f10 = read_imagef(volume, sampler, pos + (int2)(1,0)).x;
     float f_10 = read_imagef(volume, sampler, pos - (int2)(1,0)).x;
     float f01 = read_imagef(volume, sampler, pos + (int2)(0,1)).x;
     float f0_1 = read_imagef(volume, sampler, pos - (int2)(0,1)).x;
 
     float4 gradient = {
-        0.5f*(f10-f_10), 
-        0.5f*(f01-f0_1),
+        (f10-f_10)/2.0f, 
+        (f01-f0_1)/2.0f,
         0,
         0
     };
