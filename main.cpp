@@ -272,7 +272,8 @@ SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels,
                     iterationKernel,
                     NullRange,
                     NDRange(rangeX,rangeY,rangeZ),
-                    NDRange(4,4,4),
+                    //NDRange(4,4,4),
+                    NullRange,
                     NULL,
                     &startEvent
             );
@@ -282,7 +283,8 @@ SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels,
                     iterationKernel,
                     NullRange,
                     NDRange(rangeX,rangeY,rangeZ),
-                    NDRange(4,4,4),
+                    //NDRange(4,4,4),
+                    NullRange,
                     NULL,
                     &event
             );
@@ -291,7 +293,8 @@ SIPL::float3 * run3DKernels(Context context, CommandQueue queue, float * voxels,
                     iterationKernel,
                     NullRange,
                     NDRange(rangeX,rangeY,rangeZ),
-                    NDRange(4,4,4)
+                    //NDRange(4,4,4)
+                    NullRange
             );
         }
     }
@@ -405,7 +408,8 @@ SIPL::float3 * run3DKernelsWithoutTexture(Context context, CommandQueue queue, f
                     iterationKernel,
                     NullRange,
                     NDRange(rangeX,rangeY,rangeZ),
-                    NDRange(4,4,4),
+                    NullRange,
+                    //NDRange(4,4,4),
                     NULL,
                     &startEvent
             );
@@ -415,7 +419,8 @@ SIPL::float3 * run3DKernelsWithoutTexture(Context context, CommandQueue queue, f
                     iterationKernel,
                     NullRange,
                     NDRange(rangeX,rangeY,rangeZ),
-                    NDRange(4,4,4),
+                    //NDRange(4,4,4),
+                    NullRange,
                     NULL,
                     &event
             );
@@ -424,7 +429,8 @@ SIPL::float3 * run3DKernelsWithoutTexture(Context context, CommandQueue queue, f
                     iterationKernel,
                     NullRange,
                     NDRange(rangeX,rangeY,rangeZ),
-                    NDRange(4,4,4)
+                    //NDRange(4,4,4)
+                    NullRange
             );
         }
     }
