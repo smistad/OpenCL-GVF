@@ -1,8 +1,9 @@
 About
 =============================
 This is an optimized OpenCL implementation of Gradient Vector Flow (GVF) that runs on GPUs and CPUs for both 2D and 3D.
+For more details about the implementation, see the scientific article ["Real-time gradient vector flow on GPUs using OpenCL"](http://www.springerlink.com/content/v0071r27706u5135/) and https://www.eriksmistad.no/gpu-based-gradient-vector-flow-using-opencl/.
 
-For more details about the implementation, see the scientific article ["Real-time gradient vector flow on GPUs using OpenCL"](http://www.springerlink.com/content/v0071r27706u5135/).
+*Note that this software has been moved into the [FAST framework](https://github.com/smistad/FAST/) where it is further developed and maintained.*
 
 Dependencies
 =============================
